@@ -26,11 +26,11 @@ describe('Auth', () => {
     cy.screenshot('auth-dashboard-admin')
   })
 
-  it('Ping backend button shows ok', () => {
+  it('dashboard greets the signed-in user and links to the schedule', () => {
     cy.loginAs('admin@example.com', 'admin')
     cy.visitAuthed('/')
-    cy.contains('button', 'Ping backend').click()
-    cy.contains('/healthz → ').should('be.visible')
-    cy.contains('ok').should('be.visible')
+    cy.contains('h1', /Hello/).should('be.visible')
+    cy.contains('a', /Open schedule/).should('have.attr', 'href', '/schedule')
+    cy.get('[data-kpis]').should('be.visible')
   })
 })

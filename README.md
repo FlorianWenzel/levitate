@@ -4,7 +4,9 @@
 
 Levitate is a self-hosted alternative to Float for tracking who's working on what, when. Drag projects across a workday-only grid, see capacity at a glance, manage time-off, export reports as CSV. Built as a single Go binary that serves both the API and the SPA.
 
-![Schedule](docs/screenshots/dashboard.png)
+![Dashboard](docs/screenshots/dashboard.png)
+
+The dashboard summarises the team in four KPI cards (active people / active projects / this week's assigned hours / this-week utilization with overallocation flagged), a per-week team-utilization bar chart over the next 8 weeks, hours-by-project, and the next chunk of upcoming time off.
 
 [![CI](https://github.com/florianwenzel/levitate/actions/workflows/ci.yml/badge.svg)](https://github.com/florianwenzel/levitate/actions/workflows/ci.yml)
 [![Image](https://github.com/florianwenzel/levitate/actions/workflows/docker.yml/badge.svg)](https://github.com/florianwenzel/levitate/actions/workflows/docker.yml)
@@ -166,7 +168,7 @@ Final image: ~30 MB, multi-arch (linux/amd64 + linux/arm64 in CI).
 - Go 1.25 · chi · sqlc · pgx/v5 · coreos/go-oidc · golang-migrate · slog
 - Vue 3 (`<script setup>`) · Nuxt 3 SPA · Pinia · Tailwind · oidc-client-ts
 - Postgres 16 · OIDC (any provider; reference: Keycloak 26)
-- Cypress 13 (87 tests across 17 specs, ~35 s)
+- Cypress 13 (94 tests across 18 specs, ~38 s)
 
 ## Contributing
 
