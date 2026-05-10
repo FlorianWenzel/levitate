@@ -1,0 +1,90 @@
+export type Person = {
+  id: string
+  name: string
+  email: string
+  role: string
+  weekly_capacity_hours: number
+  archived_at: string | null
+  created_at: string
+  updated_at: string
+}
+
+export type PersonInput = {
+  name: string
+  email: string
+  role: string
+  weekly_capacity_hours: number
+}
+
+export type Project = {
+  id: string
+  name: string
+  client: string
+  color: string
+  status: 'active' | 'archived'
+  notes: string
+  archived_at: string | null
+  created_at: string
+  updated_at: string
+}
+
+export type ProjectInput = {
+  name: string
+  client: string
+  color: string
+  notes: string
+}
+
+export type Assignment = {
+  id: string
+  person_id: string
+  project_id: string
+  start_date: string
+  end_date: string
+  hours_per_day: number
+  notes: string
+  created_at: string
+  updated_at: string
+}
+
+export type AssignmentInput = {
+  person_id: string
+  project_id: string
+  start_date: string
+  end_date: string
+  hours_per_day: number
+  notes: string
+}
+
+export type TimeOffType = 'vacation' | 'sick' | 'holiday' | 'other'
+
+export type TimeOff = {
+  id: string
+  person_id: string
+  start_date: string
+  end_date: string
+  type: TimeOffType
+  notes: string
+  created_at: string
+  updated_at: string
+}
+
+export type TimeOffInput = {
+  person_id: string
+  start_date: string
+  end_date: string
+  type: TimeOffType
+  notes: string
+}
+
+export type UtilizationCell = {
+  person_id: string
+  person_name: string
+  weekly_capacity_hours: number
+  week_start: string
+  assigned_hours: number
+  time_off_hours: number
+  available_hours: number
+  utilization_pct: number
+  overallocated: boolean
+}

@@ -1,0 +1,27 @@
+# Build output
+backend/dist/
+backend/internal/frontend/dist/*
+!backend/internal/frontend/dist/.gitkeep
+frontend/.nuxt/
+frontend/.output/
+frontend/node_modules/
+frontend/dist/
+e2e/node_modules/
+e2e/cypress/screenshots/
+e2e/cypress/videos/
+
+# VCS / editor / OS
+.git/
+.github/
+.idea/
+.vscode/
+.DS_Store
+
+# Runtime / dev
+.env
+.env.local
+*.log
+docker-compose*.yml
+
+# Tests
+backend/coverage.out

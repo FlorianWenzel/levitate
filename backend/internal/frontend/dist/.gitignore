@@ -1,0 +1,5 @@
+# The Nuxt build is dropped here at production-image build time.
+# Don't track build artifacts in git; the directory itself is preserved by .gitkeep.
+*
+!.gitkeep
+!.gitignore

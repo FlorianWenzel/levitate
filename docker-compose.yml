@@ -1,0 +1,94 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: levitate-postgres
+    environment:
+      POSTGRES_USER: levitate
+      POSTGRES_PASSWORD: levitate
+      POSTGRES_DB: levitate
+    ports:
+      - "5432:5432"
+    volumes:
+      - levitate-pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U levitate -d levitate"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.0
+    container_name: levitate-keycloak
+    command: ["start-dev", "--import-realm"]
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: admin
+      KC_HEALTH_ENABLED: "true"
+      KC_HTTP_PORT: "8080"
+      # Public URL: matches what the browser hits on the host.
+      KC_HOSTNAME: http://localhost:8081
+      # Dynamic backchannel lets the backend reach Keycloak via the docker network
+      # (http://keycloak:8080) while frontchannel URLs (issuer, login pages) remain
+      # the public localhost:8081 — so tokens minted for the browser have a
+      # consistent `iss` claim.
+      KC_HOSTNAME_BACKCHANNEL_DYNAMIC: "true"
+    ports:
+      - "8081:8080"
+    volumes:
+      - ./keycloak:/opt/keycloak/data/import:ro
+
+  backend:
+    build:
+      context: ./backend
+    container_name: levitate-backend
+    depends_on:
+      postgres:
+        condition: service_healthy
+      keycloak:
+        condition: service_started
+    environment:
+      LEVITATE_HTTP_ADDR: ":8080"
+      LEVITATE_LOG_LEVEL: info
+      LEVITATE_DB_URL: postgres://levitate:levitate@postgres:5432/levitate?sslmode=disable
+      # Public issuer (matches `iss` in tokens issued to the browser).
+      LEVITATE_OIDC_ISSUER: http://localhost:8081/realms/levitate
+      # Internal discovery URL — backend fetches discovery + JWKs over the docker network.
+      # The InsecureIssuerURLContext bridge is applied in code.
+      LEVITATE_OIDC_DISCOVERY_URL: http://keycloak:8080/realms/levitate
+      LEVITATE_OIDC_AUDIENCE: levitate-frontend
+      LEVITATE_OIDC_ROLE_CLAIM: roles
+      LEVITATE_CORS_ORIGINS: http://localhost:3000
+      LEVITATE_ALLOW_TEST_RESET: "true"
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./backend:/app
+      - go-mod-cache:/go/pkg/mod
+      - go-build-cache:/root/.cache/go-build
+
+  frontend:
+    build:
+      context: ./frontend
+    container_name: levitate-frontend
+    depends_on:
+      - backend
+    environment:
+      NUXT_PUBLIC_API_BASE: http://localhost:8080
+      NUXT_PUBLIC_OIDC_ISSUER: http://localhost:8081/realms/levitate
+      NUXT_PUBLIC_OIDC_CLIENT_ID: levitate-frontend
+      CHOKIDAR_USEPOLLING: "true"
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./frontend:/app
+      - frontend-node-modules:/app/node_modules
+      - frontend-nuxt:/app/.nuxt
+      - frontend-output:/app/.output
+
+volumes:
+  levitate-pg:
+  go-mod-cache:
+  go-build-cache:
+  frontend-node-modules:
+  frontend-nuxt:
+  frontend-output:
