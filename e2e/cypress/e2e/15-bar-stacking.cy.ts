@@ -23,15 +23,15 @@ describe('Schedule grid: bar lane stacking', () => {
     cy.apiRequest({ url: '/api/people' }).then((r) => { personId = (r.body as any[])[0].id })
     cy.apiRequest({
       method: 'POST', url: '/api/projects',
-      body: { name: 'Stack A', client: '', color: '#EF4444', notes: '' },
+      body: { name: 'Bombe', client: '', color: '#EF4444', notes: '' },
     }).then((r) => { projectAId = r.body.id })
     cy.apiRequest({
       method: 'POST', url: '/api/projects',
-      body: { name: 'Stack B', client: '', color: '#3B82F6', notes: '' },
+      body: { name: 'Colossus', client: '', color: '#3B82F6', notes: '' },
     }).then((r) => { projectBId = r.body.id })
     cy.apiRequest({
       method: 'POST', url: '/api/projects',
-      body: { name: 'Stack C', client: '', color: '#10B981', notes: '' },
+      body: { name: 'ENIAC', client: '', color: '#10B981', notes: '' },
     }).then((r) => { projectCId = r.body.id })
   })
 

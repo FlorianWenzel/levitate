@@ -16,15 +16,7 @@ The dashboard summarises the team in four KPI cards (active people / active proj
 
 - **Drag-and-drop schedule grid** — workday-only columns (no weekends), bars stack flush when assignments overlap, side handles to resize duration, top handle to resize hours/day, right-click for Edit / Split / Delete.
 
-  ![Schedule with stacked bars](docs/screenshots/schedule-stacking.png)
-
-- **Click-and-drag to create assignments** with a live ghost selection that auto-clips around time-off.
-
-  ![Drag to create](docs/screenshots/schedule-drag-to-create.png)
-
-- **Time-off as a striped blocker** — full-row, diagonal-stripe overlay; assignments dragged or created across it are auto-clipped to the workday boundary.
-
-  ![Time off](docs/screenshots/schedule-time-off.png)
+  ![Schedule](docs/screenshots/schedule.png)
 
 - **Capacity heatmap** — per-person, per-week assigned vs. available hours, overallocation flagged in red. Workdays only — a Mon–Sun assignment at 8 h/day is 40 h/week, not 56.
 
@@ -122,10 +114,10 @@ Services that come up:
 
 Two seeded users:
 
-| User                 | Password | Role     |
-| -------------------- | -------- | -------- |
-| admin@example.com    | admin    | admin    |
-| member@example.com   | member   | member   |
+| User                 | Password | Display name    | Role     |
+| -------------------- | -------- | --------------- | -------- |
+| admin@example.com    | admin    | Ada Lovelace    | admin    |
+| member@example.com   | member   | Alan Turing     | member   |
 
 After editing `go.mod` or `package.json`, rebuild: `docker compose up -d --build`. Plain code changes hot-reload.
 
@@ -168,7 +160,7 @@ Final image: ~30 MB, multi-arch (linux/amd64 + linux/arm64 in CI).
 - Go 1.25 · chi · sqlc · pgx/v5 · coreos/go-oidc · golang-migrate · slog
 - Vue 3 (`<script setup>`) · Nuxt 3 SPA · Pinia · Tailwind · oidc-client-ts
 - Postgres 16 · OIDC (any provider; reference: Keycloak 26)
-- Cypress 13 (94 tests across 18 specs, ~38 s)
+- Cypress 13 (97 tests across 19 specs, ~40 s)
 
 ## Contributing
 

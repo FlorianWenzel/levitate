@@ -19,7 +19,7 @@ describe('Schedule', () => {
     // At least one ISO week label (W followed by digits)
     cy.contains(/W\d{1,2}/).should('be.visible')
     // Auto-created admin person row should be there.
-    cy.contains('Ada Admin').should('be.visible')
+    cy.contains('Ada Lovelace').should('be.visible')
     cy.screenshot('schedule-grid')
   })
 

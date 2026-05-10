@@ -206,7 +206,7 @@ describe('Dashboard', () => {
       cy.visitAuthed('/')
       cy.get('[data-time-off-list]').within(() => {
         cy.get(`[data-time-off-id="${timeOffId}"]`).should('be.visible').within(() => {
-          cy.contains('Ada Admin')
+          cy.contains('Ada Lovelace')
           cy.contains('vacation')
         })
       })

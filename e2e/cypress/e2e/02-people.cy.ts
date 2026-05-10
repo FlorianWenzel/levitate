@@ -8,7 +8,7 @@ describe('People', () => {
   it('lists seeded OIDC users as auto-created people', () => {
     cy.visitAuthed('/people')
     cy.contains('h1', 'People').should('be.visible')
-    cy.contains('Ada Admin').should('be.visible')
+    cy.contains('Ada Lovelace').should('be.visible')
     cy.screenshot('people-list-with-auto-created')
   })
 
