@@ -12,7 +12,7 @@ export default defineConfig({
     defaultCommandTimeout: 10000,
     setupNodeEvents(on) {
       on('task', {
-        log(msg: string) {
+        log(msg) {
           // eslint-disable-next-line no-console
           console.log('[task]', msg)
           return null
