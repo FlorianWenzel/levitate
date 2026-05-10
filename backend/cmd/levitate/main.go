@@ -54,20 +54,30 @@ func main() {
 	}
 
 	if cfg.OIDCIssuer != "" {
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-		v, err := auth.NewVerifier(ctx, auth.Options{
-			Issuer:       cfg.OIDCIssuer,
-			DiscoveryURL: cfg.OIDCDiscoveryURL,
-			Audience:     cfg.OIDCAudience,
-			RoleClaim:    cfg.OIDCRoleClaim,
-		})
-		cancel()
-		if err != nil {
-			logger.Error("oidc init failed; /api routes will be unavailable", "err", err)
-		} else {
-			deps.Verifier = v
-			logger.Info("oidc verifier ready", "issuer", cfg.OIDCIssuer)
+		// In container deployments the IdP often boots a few seconds after we
+		// do; retry discovery instead of giving up so /api/* always comes up.
+		var v *auth.Verifier
+		var lastErr error
+		for attempt := 1; attempt <= 60; attempt++ {
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			v, lastErr = auth.NewVerifier(ctx, auth.Options{
+				Issuer:       cfg.OIDCIssuer,
+				DiscoveryURL: cfg.OIDCDiscoveryURL,
+				Audience:     cfg.OIDCAudience,
+				RoleClaim:    cfg.OIDCRoleClaim,
+			})
+			cancel()
+			if lastErr == nil {
+				break
+			}
+			logger.Warn("oidc discovery not ready; retrying", "attempt", attempt, "err", lastErr)
+			time.Sleep(2 * time.Second)
 		}
+		if v == nil {
+			fatal("oidc init failed after retries", lastErr)
+		}
+		deps.Verifier = v
+		logger.Info("oidc verifier ready", "issuer", cfg.OIDCIssuer)
 	} else {
 		logger.Warn("OIDC issuer not configured; /api routes disabled")
 	}
