@@ -1,4 +1,6 @@
 // https://nuxt.com/docs/api/configuration/nuxt-config
+declare const process: { env: Record<string, string | undefined> }
+
 export default defineNuxtConfig({
   compatibilityDate: '2025-01-01',
   // SPA: OIDC client lives in the browser only, and we don't need SSR for an internal tool.

@@ -65,6 +65,7 @@ func NewRouter(d Deps) http.Handler {
 	assignments := newAssignmentsHandler(q)
 	timeOff := newTimeOffHandler(q)
 	reports := newReportsHandler(q)
+	floatImport := newFloatImportHandler(q, d.Pool)
 
 	r.Route("/api", func(r chi.Router) {
 		r.Use(d.Verifier.Middleware)
@@ -77,6 +78,10 @@ func NewRouter(d Deps) http.Handler {
 		r.Get("/reports/utilization", reports.utilizationJSON)
 		r.Get("/reports/utilization.csv", reports.utilizationCSV)
 		r.Get("/reports/assignments.csv", reports.assignmentsCSV)
+		r.Group(func(r chi.Router) {
+			r.Use(auth.RequireRole(auth.RoleAdmin))
+			r.Post("/import/float", floatImport.importFloat)
+		})
 	})
 
 	// In production builds (the multi-stage Dockerfile) the embedded SPA is

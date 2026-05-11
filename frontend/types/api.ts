@@ -88,3 +88,22 @@ export type UtilizationCell = {
   utilization_pct: number
   overallocated: boolean
 }
+
+export type FloatImportInput = {
+  api_token: string
+  base_url: string
+  start_date: string
+  end_date: string
+}
+
+export type FloatImportResult = {
+  people_created: number
+  people_skipped: number
+  projects_created: number
+  projects_skipped: number
+  assignments_created: number
+  assignments_skipped: number
+  time_off_created: number
+  time_off_skipped: number
+  warnings: string[]
+}

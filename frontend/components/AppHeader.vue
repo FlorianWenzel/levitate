@@ -11,6 +11,7 @@ const links = computed(() => [
   { to: '/schedule', label: 'Schedule' },
   { to: '/capacity', label: 'Capacity' },
   { to: '/reports', label: 'Reports' },
+  ...(auth.isAdmin ? [{ to: '/import', label: 'Import' }] : []),
 ])
 
 const isActive = (to: string) => route.path === to || (to !== '/' && route.path.startsWith(to))
