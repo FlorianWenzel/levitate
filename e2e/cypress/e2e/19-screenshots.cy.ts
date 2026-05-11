@@ -165,4 +165,18 @@ describe('README screenshots (populated demo data)', () => {
     cy.contains('Margaret Hamilton').should('be.visible')
     cy.screenshot('readme-capacity', { capture: 'viewport' })
   })
+
+  it('captures configurable reports', () => {
+    seed()
+    cy.visitAuthed('/reports')
+    cy.contains('h1', 'Reports').should('be.visible')
+    cy.get('[data-report-group]').select('person')
+    cy.get('[data-report-metric]').select('assigned_hours')
+    cy.get('[data-report-limit]').select('999')
+    cy.get('[data-report-chart]').within(() => {
+      cy.contains('Assigned hours by person').should('be.visible')
+      cy.contains('Margaret Hamilton').should('be.visible')
+    })
+    cy.screenshot('readme-reports', { capture: 'viewport' })
+  })
 })
