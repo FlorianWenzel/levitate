@@ -61,6 +61,8 @@ services:
       LEVITATE_ALLOW_TEST_RESET: "true"
     ports:
       - "8080:8080"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     volumes:
       - ./backend:/app
       - go-mod-cache:/go/pkg/mod

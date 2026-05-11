@@ -56,9 +56,10 @@ const floatMockData = {
 }
 
 function startFloatMock() {
+  const publicHost = process.env.FLOAT_MOCK_HOST || 'host.docker.internal'
   if (floatMockServer) {
     const address = floatMockServer.address()
-    return `http://127.0.0.1:${address.port}`
+    return `http://${publicHost}:${address.port}`
   }
 
   floatMockServer = http.createServer((req, res) => {
@@ -89,9 +90,9 @@ function startFloatMock() {
   })
 
   return new Promise((resolve) => {
-    floatMockServer.listen(0, '127.0.0.1', () => {
+    floatMockServer.listen(0, '0.0.0.0', () => {
       const address = floatMockServer.address()
-      resolve(`http://127.0.0.1:${address.port}`)
+      resolve(`http://${publicHost}:${address.port}`)
     })
   })
 }
