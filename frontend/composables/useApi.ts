@@ -6,16 +6,18 @@ export function useApi() {
   const config = useRuntimeConfig()
   const auth = useAuthStore()
 
+  const fetcher = $fetch as <T>(request: string, opts?: FetchOptions<'json'>) => Promise<T>
+
   async function call<T = unknown>(path: string, opts: FetchOptions = {}): Promise<T> {
     const token = auth.accessToken
     const headers: Record<string, string> = {
       ...(opts.headers as Record<string, string> | undefined),
     }
     if (token) headers.Authorization = `Bearer ${token}`
-    return await $fetch<T>(`${config.public.apiBase}${path}`, {
+    return await fetcher<T>(`${config.public.apiBase}${path}`, {
       ...opts,
       headers,
-    } as FetchOptions<'json'>) as T
+    } as FetchOptions<'json'>)
   }
 
   return { call }
