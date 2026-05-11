@@ -2,7 +2,7 @@
 
 > Open-source team scheduling and resource management. **They float. We levitate.**
 
-Levitate is a self-hosted alternative to Float for tracking who's working on what, when. Drag projects across a workday-only grid, see capacity at a glance, manage time-off, export reports as CSV. Built as a single Go binary that serves both the API and the SPA.
+Levitate is a self-hosted alternative to Float for tracking who's working on what, when. Drag projects across a workday-only grid, see capacity at a glance, manage time-off, and explore configurable reports before exporting CSV. Built as a single Go binary that serves both the API and the SPA.
 
 ![Dashboard](docs/screenshots/dashboard.png)
 
@@ -22,7 +22,7 @@ The dashboard summarises the team in four KPI cards (active people / active proj
 
   ![Capacity](docs/screenshots/capacity.png)
 
-- **CSV exports** for utilization and assignments over any date range.
+- **Configurable reports** — graph utilization by week or person, switch metrics, sort, limit visible people, and export utilization or assignment CSVs over any date range.
 
   ![Reports](docs/screenshots/reports.png)
 
