@@ -46,6 +46,7 @@ const totalCreated = computed(() => {
     + result.value.projects_created
     + result.value.assignments_created
     + result.value.time_off_created
+    + result.value.milestones_created
 })
 
 const rows = computed(() => {
@@ -55,6 +56,7 @@ const rows = computed(() => {
     { label: 'Projects', created: result.value.projects_created, skipped: result.value.projects_skipped },
     { label: 'Assignments', created: result.value.assignments_created, skipped: result.value.assignments_skipped },
     { label: 'Time off', created: result.value.time_off_created, skipped: result.value.time_off_skipped },
+    { label: 'Milestones', created: result.value.milestones_created, skipped: result.value.milestones_skipped },
   ]
 })
 </script>

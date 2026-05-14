@@ -16,7 +16,7 @@ import (
 func resetHandler(pool *pgxpool.Pool) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		_, err := pool.Exec(r.Context(), `
-			TRUNCATE TABLE assignments, time_off, projects, people, audit_log RESTART IDENTITY CASCADE;
+			TRUNCATE TABLE assignments, time_off, milestones, projects, people, audit_log RESTART IDENTITY CASCADE;
 		`)
 		if err != nil {
 			WriteProblem(w, r, http.StatusInternalServerError, "reset_failed", err.Error())

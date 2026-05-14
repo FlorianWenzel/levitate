@@ -66,6 +66,7 @@ func NewRouter(d Deps) http.Handler {
 	timeOff := newTimeOffHandler(q)
 	reports := newReportsHandler(q)
 	floatImport := newFloatImportHandler(q, d.Pool)
+	milestones := newMilestonesHandler(q)
 
 	r.Route("/api", func(r chi.Router) {
 		r.Use(d.Verifier.Middleware)
@@ -73,6 +74,8 @@ func NewRouter(d Deps) http.Handler {
 		r.Get("/me", handleMe)
 		r.Route("/people", people.routes)
 		r.Route("/projects", projects.routes)
+		r.Route("/projects/{id}/milestones", milestones.projectRoutes)
+		r.Route("/milestones", milestones.itemRoutes)
 		r.Route("/assignments", assignments.routes)
 		r.Route("/time-off", timeOff.routes)
 		r.Get("/reports/utilization", reports.utilizationJSON)
