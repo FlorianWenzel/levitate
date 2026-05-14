@@ -30,6 +30,17 @@ type AuditLog struct {
 	CreatedAt   pgtype.Timestamptz `json:"created_at"`
 }
 
+type Milestone struct {
+	ID        pgtype.UUID        `json:"id"`
+	ProjectID pgtype.UUID        `json:"project_id"`
+	PhaseID   pgtype.UUID        `json:"phase_id"`
+	Name      string             `json:"name"`
+	Date      pgtype.Date        `json:"date"`
+	EndDate   pgtype.Date        `json:"end_date"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
+}
+
 type Person struct {
 	ID                  pgtype.UUID        `json:"id"`
 	Name                string             `json:"name"`

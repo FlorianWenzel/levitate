@@ -121,7 +121,15 @@ onMounted(load)
             <td class="px-4 py-2">
               <span class="inline-block h-4 w-4 rounded" :style="{ background: p.color }"></span>
             </td>
-            <td class="px-4 py-2 font-medium text-slate-900">{{ p.name }}</td>
+            <td class="px-4 py-2 font-medium text-slate-900">
+              <NuxtLink
+                :to="`/projects/${p.id}`"
+                class="hover:underline"
+                :data-cy="`project-link-${p.name}`"
+              >
+                {{ p.name }}
+              </NuxtLink>
+            </td>
             <td class="px-4 py-2 text-slate-600">{{ p.client }}</td>
             <td class="px-4 py-2">
               <span

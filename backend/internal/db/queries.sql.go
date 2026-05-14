@@ -98,6 +98,42 @@ func (q *Queries) CreateAssignment(ctx context.Context, arg CreateAssignmentPara
 	return i, err
 }
 
+const createMilestone = `-- name: CreateMilestone :one
+INSERT INTO milestones (project_id, phase_id, name, date, end_date)
+VALUES ($1, $2, $3, $4, $5)
+RETURNING id, project_id, phase_id, name, date, end_date, created_at, updated_at
+`
+
+type CreateMilestoneParams struct {
+	ProjectID pgtype.UUID `json:"project_id"`
+	PhaseID   pgtype.UUID `json:"phase_id"`
+	Name      string      `json:"name"`
+	Date      pgtype.Date `json:"date"`
+	EndDate   pgtype.Date `json:"end_date"`
+}
+
+func (q *Queries) CreateMilestone(ctx context.Context, arg CreateMilestoneParams) (Milestone, error) {
+	row := q.db.QueryRow(ctx, createMilestone,
+		arg.ProjectID,
+		arg.PhaseID,
+		arg.Name,
+		arg.Date,
+		arg.EndDate,
+	)
+	var i Milestone
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.PhaseID,
+		&i.Name,
+		&i.Date,
+		&i.EndDate,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const createPerson = `-- name: CreatePerson :one
 INSERT INTO people (name, email, role, weekly_capacity_hours)
 VALUES ($1, $2, $3, $4)
@@ -215,6 +251,15 @@ func (q *Queries) DeleteAssignment(ctx context.Context, id pgtype.UUID) error {
 	return err
 }
 
+const deleteMilestone = `-- name: DeleteMilestone :exec
+DELETE FROM milestones WHERE id = $1
+`
+
+func (q *Queries) DeleteMilestone(ctx context.Context, id pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, deleteMilestone, id)
+	return err
+}
+
 const deleteTimeOff = `-- name: DeleteTimeOff :exec
 DELETE FROM time_off WHERE id = $1
 `
@@ -256,6 +301,26 @@ func (q *Queries) GetAssignment(ctx context.Context, id pgtype.UUID) (Assignment
 		&i.EndDate,
 		&i.HoursPerDay,
 		&i.Notes,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getMilestone = `-- name: GetMilestone :one
+SELECT id, project_id, phase_id, name, date, end_date, created_at, updated_at FROM milestones WHERE id = $1
+`
+
+func (q *Queries) GetMilestone(ctx context.Context, id pgtype.UUID) (Milestone, error) {
+	row := q.db.QueryRow(ctx, getMilestone, id)
+	var i Milestone
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.PhaseID,
+		&i.Name,
+		&i.Date,
+		&i.EndDate,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -375,6 +440,43 @@ func (q *Queries) ListAssignmentsInRange(ctx context.Context, arg ListAssignment
 			&i.EndDate,
 			&i.HoursPerDay,
 			&i.Notes,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listMilestonesByProject = `-- name: ListMilestonesByProject :many
+
+SELECT id, project_id, phase_id, name, date, end_date, created_at, updated_at FROM milestones
+WHERE project_id = $1
+ORDER BY date ASC, id ASC
+`
+
+// ===== milestones =====
+func (q *Queries) ListMilestonesByProject(ctx context.Context, projectID pgtype.UUID) ([]Milestone, error) {
+	rows, err := q.db.Query(ctx, listMilestonesByProject, projectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Milestone
+	for rows.Next() {
+		var i Milestone
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.PhaseID,
+			&i.Name,
+			&i.Date,
+			&i.EndDate,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 		); err != nil {
@@ -600,6 +702,47 @@ func (q *Queries) UpdateAssignment(ctx context.Context, arg UpdateAssignmentPara
 		&i.EndDate,
 		&i.HoursPerDay,
 		&i.Notes,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const updateMilestone = `-- name: UpdateMilestone :one
+UPDATE milestones
+SET phase_id = $2,
+    name = $3,
+    date = $4,
+    end_date = $5,
+    updated_at = now()
+WHERE id = $1
+RETURNING id, project_id, phase_id, name, date, end_date, created_at, updated_at
+`
+
+type UpdateMilestoneParams struct {
+	ID      pgtype.UUID `json:"id"`
+	PhaseID pgtype.UUID `json:"phase_id"`
+	Name    string      `json:"name"`
+	Date    pgtype.Date `json:"date"`
+	EndDate pgtype.Date `json:"end_date"`
+}
+
+func (q *Queries) UpdateMilestone(ctx context.Context, arg UpdateMilestoneParams) (Milestone, error) {
+	row := q.db.QueryRow(ctx, updateMilestone,
+		arg.ID,
+		arg.PhaseID,
+		arg.Name,
+		arg.Date,
+		arg.EndDate,
+	)
+	var i Milestone
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.PhaseID,
+		&i.Name,
+		&i.Date,
+		&i.EndDate,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)

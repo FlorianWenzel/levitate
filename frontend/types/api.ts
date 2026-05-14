@@ -107,5 +107,25 @@ export type FloatImportResult = {
   assignments_skipped: number
   time_off_created: number
   time_off_skipped: number
+  milestones_created: number
+  milestones_skipped: number
   warnings: string[]
+}
+
+export type Milestone = {
+  id: string
+  project_id: string
+  phase_id: string | null
+  name: string
+  date: string
+  end_date: string | null
+  created_at: string
+  updated_at: string
+}
+
+export type MilestoneInput = {
+  name: string
+  date: string
+  end_date?: string | null
+  phase_id?: string | null
 }

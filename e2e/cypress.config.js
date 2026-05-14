@@ -63,6 +63,16 @@ const floatMockData = {
   '/timeoff-types': [
     { timeoff_type_id: 601, name: 'Vacation' },
   ],
+  '/milestones': [
+    {
+      milestone_id: 701,
+      name: 'Beta launch',
+      project_id: 301,
+      phase_id: 0,
+      date: '2026-06-05',
+      end_date: '',
+    },
+  ],
 }
 
 function startFloatMock() {

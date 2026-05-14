@@ -49,6 +49,8 @@ type floatImportResult struct {
 	AssignmentsSkipped int      `json:"assignments_skipped"`
 	TimeOffCreated     int      `json:"time_off_created"`
 	TimeOffSkipped     int      `json:"time_off_skipped"`
+	MilestonesCreated  int      `json:"milestones_created"`
+	MilestonesSkipped  int      `json:"milestones_skipped"`
 	Warnings           []string `json:"warnings"`
 }
 
@@ -106,6 +108,15 @@ type floatTimeOff struct {
 type floatTimeOffType struct {
 	ID   int    `json:"timeoff_type_id"`
 	Name string `json:"name"`
+}
+
+type floatMilestone struct {
+	ID        int    `json:"milestone_id"`
+	Name      string `json:"name"`
+	ProjectID int    `json:"project_id"`
+	PhaseID   int    `json:"phase_id"`
+	Date      string `json:"date"`
+	EndDate   string `json:"end_date"`
 }
 
 func (h *floatImportHandler) importFloat(w http.ResponseWriter, r *http.Request) {
@@ -187,7 +198,14 @@ func (h *floatImportHandler) importFloat(w http.ResponseWriter, r *http.Request)
 		timeOffTypeWarning = "Float time-off types could not be loaded; imported time off was categorized as other unless the type name was available."
 	}
 
-	result, err := h.importFloatData(r.Context(), people, clients, projects, tasks, timeOffs, timeOffTypes, fromDate, toDate)
+	milestones, err := fetchFloatPage[floatMilestone](r.Context(), c, "/milestones", nil)
+	milestonesWarning := ""
+	if err != nil {
+		milestones = nil
+		milestonesWarning = "Float milestones could not be loaded; imported projects were created without milestones."
+	}
+
+	result, err := h.importFloatData(r.Context(), people, clients, projects, tasks, timeOffs, timeOffTypes, milestones, fromDate, toDate)
 	if err != nil {
 		WriteProblem(w, r, http.StatusInternalServerError, "import_failed", err.Error())
 		return
@@ -195,10 +213,13 @@ func (h *floatImportHandler) importFloat(w http.ResponseWriter, r *http.Request)
 	if timeOffTypeWarning != "" {
 		result.Warnings = append(result.Warnings, timeOffTypeWarning)
 	}
+	if milestonesWarning != "" {
+		result.Warnings = append(result.Warnings, milestonesWarning)
+	}
 	writeJSON(w, http.StatusOK, result)
 }
 
-func (h *floatImportHandler) importFloatData(ctx context.Context, people []floatPerson, clients []floatClient, projects []floatProject, tasks []floatTask, timeOffs []floatTimeOff, timeOffTypes []floatTimeOffType, fromDate pgtype.Date, toDate pgtype.Date) (floatImportResult, error) {
+func (h *floatImportHandler) importFloatData(ctx context.Context, people []floatPerson, clients []floatClient, projects []floatProject, tasks []floatTask, timeOffs []floatTimeOff, timeOffTypes []floatTimeOffType, milestones []floatMilestone, fromDate pgtype.Date, toDate pgtype.Date) (floatImportResult, error) {
 	tx, err := h.pool.Begin(ctx)
 	if err != nil {
 		return floatImportResult{}, err
@@ -431,6 +452,55 @@ func (h *floatImportHandler) importFloatData(ctx context.Context, people []float
 			timeOffKeys[key] = struct{}{}
 			result.TimeOffCreated++
 		}
+	}
+
+	for _, fm := range milestones {
+		projectID, ok := projectsByFloatID[fm.ProjectID]
+		if !ok {
+			result.MilestonesSkipped++
+			continue
+		}
+		name := strings.TrimSpace(fm.Name)
+		if name == "" || fm.Date == "" {
+			result.MilestonesSkipped++
+			continue
+		}
+		date, err := parseDate(fm.Date)
+		if err != nil {
+			result.MilestonesSkipped++
+			continue
+		}
+		existing, err := q.ListMilestonesByProject(ctx, projectID)
+		if err != nil {
+			return result, err
+		}
+		alreadyExists := false
+		for _, em := range existing {
+			if normalizeKey(em.Name) == normalizeKey(name) && formatDate(em.Date) == fm.Date {
+				alreadyExists = true
+				break
+			}
+		}
+		if alreadyExists {
+			result.MilestonesSkipped++
+			continue
+		}
+		var endDate pgtype.Date
+		if fm.EndDate != "" {
+			parsed, err := parseDate(fm.EndDate)
+			if err == nil {
+				endDate = parsed
+			}
+		}
+		if _, err := q.CreateMilestone(ctx, db.CreateMilestoneParams{
+			ProjectID: projectID,
+			Name:      name,
+			Date:      date,
+			EndDate:   endDate,
+		}); err != nil {
+			return result, err
+		}
+		result.MilestonesCreated++
 	}
 
 	if err := tx.Commit(ctx); err != nil {

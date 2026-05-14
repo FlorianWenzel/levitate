@@ -157,3 +157,31 @@ RETURNING *;
 
 -- name: DeleteTimeOff :exec
 DELETE FROM time_off WHERE id = $1;
+
+-- ===== milestones =====
+
+-- name: ListMilestonesByProject :many
+SELECT * FROM milestones
+WHERE project_id = $1
+ORDER BY date ASC, id ASC;
+
+-- name: GetMilestone :one
+SELECT * FROM milestones WHERE id = $1;
+
+-- name: CreateMilestone :one
+INSERT INTO milestones (project_id, phase_id, name, date, end_date)
+VALUES ($1, $2, $3, $4, $5)
+RETURNING *;
+
+-- name: UpdateMilestone :one
+UPDATE milestones
+SET phase_id = $2,
+    name = $3,
+    date = $4,
+    end_date = $5,
+    updated_at = now()
+WHERE id = $1
+RETURNING *;
+
+-- name: DeleteMilestone :exec
+DELETE FROM milestones WHERE id = $1;
