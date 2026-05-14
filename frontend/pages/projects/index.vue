@@ -15,7 +15,7 @@ const editing = ref<Project | null>(null)
 const form = ref<ProjectInput>(emptyForm())
 
 function emptyForm(): ProjectInput {
-  return { name: '', client: '', color: '#0EA5E9', notes: '' }
+  return { name: '', client: '', color: '#0EA5E9', notes: '', billable: true }
 }
 
 async function load() {
@@ -39,7 +39,7 @@ function openCreate() {
 
 function openEdit(p: Project) {
   editing.value = p
-  form.value = { name: p.name, client: p.client, color: p.color, notes: p.notes }
+  form.value = { name: p.name, client: p.client, color: p.color, notes: p.notes, billable: p.billable }
   showForm.value = true
 }
 
@@ -105,23 +105,36 @@ onMounted(load)
             <th class="px-4 py-2"></th>
             <th class="px-4 py-2">Name</th>
             <th class="px-4 py-2">Client</th>
+            <th class="px-4 py-2">Billable</th>
             <th class="px-4 py-2">Status</th>
             <th class="px-4 py-2"></th>
           </tr>
         </thead>
         <tbody class="divide-y divide-slate-100">
           <tr v-if="loading">
-            <td colspan="5" class="px-4 py-6 text-center text-slate-400">Loading…</td>
+            <td colspan="6" class="px-4 py-6 text-center text-slate-400">Loading…</td>
           </tr>
           <tr v-else-if="!projects.length">
-            <td colspan="5" class="px-4 py-6 text-center text-slate-400">No projects yet.</td>
+            <td colspan="6" class="px-4 py-6 text-center text-slate-400">No projects yet.</td>
           </tr>
-          <tr v-for="p in projects" :key="p.id" class="hover:bg-slate-50">
+          <tr v-for="p in projects" :key="p.id" class="hover:bg-slate-50" :data-cy="`project-row-${p.name}`">
             <td class="px-4 py-2">
               <span class="inline-block h-4 w-4 rounded" :style="{ background: p.color }"></span>
             </td>
             <td class="px-4 py-2 font-medium text-slate-900">{{ p.name }}</td>
             <td class="px-4 py-2 text-slate-600">{{ p.client }}</td>
+            <td class="px-4 py-2">
+              <span
+                v-if="p.billable"
+                data-cy="billable-badge"
+                class="rounded bg-emerald-100 px-1.5 py-0.5 text-xs text-emerald-700"
+              >Billable</span>
+              <span
+                v-else
+                data-cy="non-billable-badge"
+                class="rounded bg-amber-100 px-1.5 py-0.5 text-xs text-amber-700"
+              >Non-billable</span>
+            </td>
             <td class="px-4 py-2">
               <span v-if="p.status === 'archived'" class="rounded bg-slate-200 px-1.5 py-0.5 text-xs text-slate-700">Archived</span>
               <span v-else class="rounded bg-emerald-100 px-1.5 py-0.5 text-xs text-emerald-700">Active</span>
@@ -162,6 +175,12 @@ onMounted(load)
           <div>
             <label class="block text-xs font-medium text-slate-600">Notes</label>
             <textarea v-model="form.notes" rows="3" class="mt-1 w-full rounded border border-slate-300 px-2 py-1.5"></textarea>
+          </div>
+          <div>
+            <label class="flex items-center gap-2 text-xs font-medium text-slate-600">
+              <input v-model="form.billable" type="checkbox" data-cy="billable-toggle" class="rounded">
+              Billable
+            </label>
           </div>
           <div class="flex justify-end gap-2 pt-2">
             <button type="button" class="rounded px-3 py-1.5 text-slate-600 hover:bg-slate-100" @click="showForm = false">Cancel</button>

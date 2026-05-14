@@ -20,7 +20,7 @@ describe('Float import', () => {
         expect(res.status).to.eq(200)
         expect(res.body).to.include({
           people_created: 1,
-          projects_created: 1,
+          projects_created: 2,
           assignments_created: 1,
           time_off_created: 1,
         })
@@ -53,10 +53,14 @@ describe('Float import', () => {
           color: '#00AEEF',
           status: 'active',
           notes: 'Imported from mock Float',
+          billable: true,
           archived_at: null,
           created_at: project.created_at,
           updated_at: project.updated_at,
         })
+        const nonBillable = res.body.find((p: any) => p.name === 'Float Internal Tools')
+        expect(nonBillable).to.exist
+        expect(nonBillable.billable).to.eq(false)
       })
 
       cy.apiRequest({ url: '/api/assignments?from=2026-06-01&to=2026-06-07' }).then((res) => {
@@ -93,9 +97,9 @@ describe('Float import', () => {
       cy.contains('label', 'API base URL').siblings('input').first().clear().type(String(baseUrl))
       cy.contains('button', 'Import Float data').click()
 
-      cy.contains('Imported 4 records').should('be.visible')
+      cy.contains('Imported 5 records').should('be.visible')
       cy.contains('tr', 'People').contains('1')
-      cy.contains('tr', 'Projects').contains('1')
+      cy.contains('tr', 'Projects').contains('2')
       cy.contains('tr', 'Assignments').contains('1')
       cy.contains('tr', 'Time off').contains('1')
     })
