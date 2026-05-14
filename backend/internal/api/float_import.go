@@ -69,12 +69,13 @@ type floatClient struct {
 }
 
 type floatProject struct {
-	ID       int    `json:"project_id"`
-	Name     string `json:"name"`
-	ClientID int    `json:"client_id"`
-	Color    string `json:"color"`
-	Notes    string `json:"notes"`
-	Active   *int   `json:"active"`
+	ID          int    `json:"project_id"`
+	Name        string `json:"name"`
+	ClientID    int    `json:"client_id"`
+	Color       string `json:"color"`
+	Notes       string `json:"notes"`
+	Active      *int   `json:"active"`
+	NonBillable *int   `json:"non_billable"`
 }
 
 type floatTask struct {
@@ -288,11 +289,16 @@ func (h *floatImportHandler) importFloatData(ctx context.Context, people []float
 			continue
 		}
 		color := normalizeFloatColor(fp.Color)
+		billable := true
+		if fp.NonBillable != nil && *fp.NonBillable == 1 {
+			billable = false
+		}
 		project, err := q.CreateProject(ctx, db.CreateProjectParams{
-			Name:   strings.TrimSpace(fp.Name),
-			Client: client,
-			Color:  color,
-			Notes:  strings.TrimSpace(fp.Notes),
+			Name:     strings.TrimSpace(fp.Name),
+			Client:   client,
+			Color:    color,
+			Notes:    strings.TrimSpace(fp.Notes),
+			Billable: billable,
 		})
 		if err != nil {
 			return result, err

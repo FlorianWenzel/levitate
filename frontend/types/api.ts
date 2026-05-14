@@ -23,6 +23,7 @@ export type Project = {
   color: string
   status: 'active' | 'archived'
   notes: string
+  billable: boolean
   archived_at: string | null
   created_at: string
   updated_at: string
@@ -33,6 +34,7 @@ export type ProjectInput = {
   client: string
   color: string
   notes: string
+  billable: boolean
 }
 
 export type Assignment = {

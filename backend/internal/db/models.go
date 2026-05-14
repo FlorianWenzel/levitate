@@ -51,6 +51,7 @@ type Project struct {
 	ArchivedAt pgtype.Timestamptz `json:"archived_at"`
 	CreatedAt  pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt  pgtype.Timestamptz `json:"updated_at"`
+	Billable   bool               `json:"billable"`
 }
 
 type TimeOff struct {

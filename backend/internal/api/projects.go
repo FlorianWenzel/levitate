@@ -18,6 +18,7 @@ type projectDTO struct {
 	Client     string     `json:"client"`
 	Color      string     `json:"color"`
 	Notes      string     `json:"notes"`
+	Billable   bool       `json:"billable"`
 	Status     string     `json:"status"`
 	ArchivedAt *time.Time `json:"archived_at"`
 	CreatedAt  time.Time  `json:"created_at"`
@@ -35,6 +36,7 @@ func toProjectDTO(p db.Project) projectDTO {
 		Client:     p.Client,
 		Color:      p.Color,
 		Notes:      p.Notes,
+		Billable:   p.Billable,
 		Status:     status,
 		ArchivedAt: tsPtr(p.ArchivedAt),
 		CreatedAt:  ts(p.CreatedAt),
@@ -43,10 +45,11 @@ func toProjectDTO(p db.Project) projectDTO {
 }
 
 type projectInput struct {
-	Name   string `json:"name"`
-	Client string `json:"client"`
-	Color  string `json:"color"`
-	Notes  string `json:"notes"`
+	Name     string `json:"name"`
+	Client   string `json:"client"`
+	Color    string `json:"color"`
+	Notes    string `json:"notes"`
+	Billable *bool  `json:"billable"`
 }
 
 func (in projectInput) validate() string {
@@ -119,11 +122,16 @@ func (h *projectsHandler) create(w http.ResponseWriter, r *http.Request) {
 	if in.Color == "" {
 		in.Color = "#64748B"
 	}
+	billable := true
+	if in.Billable != nil {
+		billable = *in.Billable
+	}
 	p, err := h.q.CreateProject(r.Context(), db.CreateProjectParams{
-		Name:   in.Name,
-		Client: in.Client,
-		Color:  in.Color,
-		Notes:  in.Notes,
+		Name:     in.Name,
+		Client:   in.Client,
+		Color:    in.Color,
+		Notes:    in.Notes,
+		Billable: billable,
 	})
 	if err != nil {
 		WriteProblem(w, r, http.StatusInternalServerError, "create_failed", err.Error())
@@ -147,12 +155,17 @@ func (h *projectsHandler) update(w http.ResponseWriter, r *http.Request) {
 		WriteProblem(w, r, http.StatusUnprocessableEntity, "validation", msg)
 		return
 	}
+	billable := true
+	if in.Billable != nil {
+		billable = *in.Billable
+	}
 	p, err := h.q.UpdateProject(r.Context(), db.UpdateProjectParams{
-		ID:     id,
-		Name:   in.Name,
-		Client: in.Client,
-		Color:  in.Color,
-		Notes:  in.Notes,
+		ID:       id,
+		Name:     in.Name,
+		Client:   in.Client,
+		Color:    in.Color,
+		Notes:    in.Notes,
+		Billable: billable,
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {

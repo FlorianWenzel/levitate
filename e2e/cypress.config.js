@@ -25,6 +25,16 @@ const floatMockData = {
       color: '00AEEF',
       notes: 'Imported from mock Float',
       active: 1,
+      non_billable: 0,
+    },
+    {
+      project_id: 302,
+      name: 'Float Internal Tools',
+      client_id: 201,
+      color: 'FFAA00',
+      notes: 'Internal, non-billable work',
+      active: 1,
+      non_billable: 1,
     },
   ],
   '/tasks': [
