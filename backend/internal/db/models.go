@@ -41,6 +41,24 @@ type Milestone struct {
 	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
 }
 
+type Phase struct {
+	ID                pgtype.UUID        `json:"id"`
+	ProjectID         pgtype.UUID        `json:"project_id"`
+	Name              string             `json:"name"`
+	Color             string             `json:"color"`
+	Notes             string             `json:"notes"`
+	StartDate         pgtype.Date        `json:"start_date"`
+	EndDate           pgtype.Date        `json:"end_date"`
+	BudgetTotal       pgtype.Numeric     `json:"budget_total"`
+	DefaultHourlyRate pgtype.Numeric     `json:"default_hourly_rate"`
+	Billable          bool               `json:"billable"`
+	Status            int16              `json:"status"`
+	ArchivedAt        pgtype.Timestamptz `json:"archived_at"`
+	FloatID           pgtype.Int8        `json:"float_id"`
+	CreatedAt         pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt         pgtype.Timestamptz `json:"updated_at"`
+}
+
 type Person struct {
 	ID                  pgtype.UUID        `json:"id"`
 	Name                string             `json:"name"`

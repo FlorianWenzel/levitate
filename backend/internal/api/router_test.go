@@ -62,6 +62,63 @@ func TestMilestoneRouteResolution(t *testing.T) {
 	}
 }
 
+// TestPhaseRouteResolution probes the router with real HTTP requests to catch
+// problems with the overlapping `{id}` parameter on project/phase routes.
+func TestPhaseRouteResolution(t *testing.T) {
+	mux := chi.NewRouter()
+
+	matched := ""
+	stub := func(label string) http.HandlerFunc {
+		return func(w http.ResponseWriter, _ *http.Request) {
+			matched = label
+			w.WriteHeader(http.StatusOK)
+		}
+	}
+
+	mux.Route("/api", func(r chi.Router) {
+		r.Route("/projects", func(r chi.Router) {
+			r.Get("/", stub("list-projects"))
+			r.Get("/{id}", stub("get-project"))
+		})
+		r.Route("/projects/{id}/phases", func(r chi.Router) {
+			r.Get("/", stub("list-phases-for-project"))
+			r.Post("/", stub("create-phase"))
+		})
+		r.Route("/phases", func(r chi.Router) {
+			r.Get("/", stub("list-phases"))
+			r.Get("/{id}", stub("get-phase"))
+			r.Patch("/{id}", stub("update-phase"))
+			r.Put("/{id}", stub("put-phase"))
+			r.Delete("/{id}", stub("delete-phase"))
+		})
+	})
+
+	cases := []struct {
+		method, path, want string
+	}{
+		{"GET", "/api/projects/abc/phases", "list-phases-for-project"},
+		{"POST", "/api/projects/abc/phases", "create-phase"},
+		{"GET", "/api/phases", "list-phases"},
+		{"GET", "/api/phases/xyz", "get-phase"},
+		{"PATCH", "/api/phases/xyz", "update-phase"},
+		{"PUT", "/api/phases/xyz", "put-phase"},
+		{"DELETE", "/api/phases/xyz", "delete-phase"},
+	}
+	for _, tc := range cases {
+		matched = ""
+		req := httptest.NewRequest(tc.method, tc.path, nil)
+		rec := httptest.NewRecorder()
+		mux.ServeHTTP(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Errorf("%s %s: got status %d, want 200; matched=%q", tc.method, tc.path, rec.Code, matched)
+			continue
+		}
+		if matched != tc.want {
+			t.Errorf("%s %s: matched %q, want %q", tc.method, tc.path, matched, tc.want)
+		}
+	}
+}
+
 // TestRouterIncludesMilestoneRoutes walks the routing tree to confirm that the
 // milestone endpoints are registered alongside the existing project subtree
 // without chi rejecting the overlapping `{id}` parameter.

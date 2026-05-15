@@ -154,3 +154,37 @@ export type MilestoneInput = {
   end_date?: string | null
   phase_id?: string | null
 }
+
+// Phase mirrors Float's Phase entity: a named time-bounded slice of a project
+// with its own optional budget, hourly rate, and billable flag. `status`
+// uses Float's encoding (0=Draft, 1=Tentative, 2=Confirmed) and `active`
+// reflects the archive state (1=Active, 0=Archived).
+export type Phase = {
+  id: string
+  project_id: string
+  name: string
+  color: string
+  notes: string
+  start_date: string | null
+  end_date: string | null
+  budget_total: number
+  default_hourly_rate: number
+  non_billable: boolean
+  status: 0 | 1 | 2
+  active: 0 | 1
+  archived_at: string | null
+  created_at: string
+  updated_at: string
+}
+
+export type PhaseInput = {
+  name: string
+  color?: string
+  notes?: string
+  start_date?: string | null
+  end_date?: string | null
+  budget_total?: number
+  default_hourly_rate?: number
+  non_billable?: boolean
+  status?: 0 | 1 | 2
+}

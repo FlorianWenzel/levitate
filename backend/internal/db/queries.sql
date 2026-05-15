@@ -186,6 +186,69 @@ RETURNING *;
 -- name: DeleteMilestone :exec
 DELETE FROM milestones WHERE id = $1;
 
+-- ===== phases =====
+
+-- name: ListPhasesByProject :many
+SELECT * FROM phases
+WHERE project_id = $1
+ORDER BY
+    CASE WHEN start_date IS NULL THEN 1 ELSE 0 END,
+    start_date ASC,
+    name ASC,
+    id ASC;
+
+-- name: ListPhases :many
+SELECT * FROM phases
+ORDER BY
+    CASE WHEN start_date IS NULL THEN 1 ELSE 0 END,
+    start_date ASC,
+    name ASC,
+    id ASC;
+
+-- name: GetPhase :one
+SELECT * FROM phases WHERE id = $1;
+
+-- name: CreatePhase :one
+INSERT INTO phases (project_id, name, color, notes, start_date, end_date, budget_total, default_hourly_rate, billable, status)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+RETURNING *;
+
+-- name: UpdatePhase :one
+UPDATE phases
+SET name                = $2,
+    color               = $3,
+    notes               = $4,
+    start_date          = $5,
+    end_date            = $6,
+    budget_total        = $7,
+    default_hourly_rate = $8,
+    billable            = $9,
+    status              = $10,
+    updated_at          = now()
+WHERE id = $1
+RETURNING *;
+
+-- name: ArchivePhase :one
+UPDATE phases
+SET archived_at = now(), updated_at = now()
+WHERE id = $1 AND archived_at IS NULL
+RETURNING *;
+
+-- name: UnarchivePhase :one
+UPDATE phases
+SET archived_at = NULL, updated_at = now()
+WHERE id = $1
+RETURNING *;
+
+-- name: DeletePhase :exec
+DELETE FROM phases WHERE id = $1;
+
+-- name: SetPhaseFloatID :exec
+UPDATE phases SET float_id = $2 WHERE id = $1;
+
+-- name: GetPhaseByFloatID :one
+SELECT * FROM phases WHERE float_id = $1;
+
 -- ===== logged_time =====
 
 -- name: ListLoggedTime :many

@@ -55,6 +55,8 @@ type floatImportResult struct {
 	TimeOffDeleted     int      `json:"time_off_deleted"`
 	MilestonesCreated  int      `json:"milestones_created"`
 	MilestonesSkipped  int      `json:"milestones_skipped"`
+	PhasesCreated      int      `json:"phases_created"`
+	PhasesSkipped      int      `json:"phases_skipped"`
 	LoggedTimeCreated  int      `json:"logged_time_created"`
 	LoggedTimeSkipped  int      `json:"logged_time_skipped"`
 	LoggedTimeDeleted  int      `json:"logged_time_deleted"`
@@ -115,6 +117,21 @@ type floatTimeOff struct {
 type floatTimeOffType struct {
 	ID   int    `json:"timeoff_type_id"`
 	Name string `json:"name"`
+}
+
+type floatPhase struct {
+	ID                int     `json:"phase_id"`
+	ProjectID         int     `json:"project_id"`
+	Name              string  `json:"name"`
+	Color             string  `json:"color"`
+	Notes             string  `json:"notes"`
+	StartDate         string  `json:"start_date"`
+	EndDate           string  `json:"end_date"`
+	BudgetTotal       float64 `json:"budget_total"`
+	DefaultHourlyRate float64 `json:"default_hourly_rate"`
+	NonBillable       *int    `json:"non_billable"`
+	Status            *int    `json:"status"`
+	Active            *int    `json:"active"`
 }
 
 type floatMilestone struct {
@@ -228,6 +245,13 @@ func (h *floatImportHandler) importFloat(w http.ResponseWriter, r *http.Request)
 		milestonesWarning = "Float milestones could not be loaded; imported projects were created without milestones."
 	}
 
+	phases, err := fetchFloatPage[floatPhase](r.Context(), c, "/phases", nil)
+	phasesWarning := ""
+	if err != nil {
+		phases = nil
+		phasesWarning = "Float phases could not be loaded; imported projects were created without phases."
+	}
+
 	loggedTime, err := fetchFloatPage[floatLoggedTime](r.Context(), c, "/logged-time", url.Values{
 		"start_date": {in.StartDate},
 		"end_date":   {in.EndDate},
@@ -246,7 +270,7 @@ func (h *floatImportHandler) importFloat(w http.ResponseWriter, r *http.Request)
 	deletedTimeOffs, deletedTimeOffsWarning := fetchFloatDeletedSafe(r.Context(), c, "/deleted/timeoffs")
 	deletedLoggedTime, deletedLoggedTimeWarning := fetchFloatDeletedSafe(r.Context(), c, "/deleted/logged-time")
 
-	result, err := h.importFloatData(r.Context(), people, clients, projects, tasks, timeOffs, timeOffTypes, milestones, loggedTime, deletedTasks, deletedTimeOffs, deletedLoggedTime, fromDate, toDate)
+	result, err := h.importFloatData(r.Context(), people, clients, projects, tasks, timeOffs, timeOffTypes, milestones, phases, loggedTime, deletedTasks, deletedTimeOffs, deletedLoggedTime, fromDate, toDate)
 	if err != nil {
 		WriteProblem(w, r, http.StatusInternalServerError, "import_failed", err.Error())
 		return
@@ -256,6 +280,9 @@ func (h *floatImportHandler) importFloat(w http.ResponseWriter, r *http.Request)
 	}
 	if milestonesWarning != "" {
 		result.Warnings = append(result.Warnings, milestonesWarning)
+	}
+	if phasesWarning != "" {
+		result.Warnings = append(result.Warnings, phasesWarning)
 	}
 	if deletedTasksWarning != "" {
 		result.Warnings = append(result.Warnings, deletedTasksWarning)
@@ -290,7 +317,7 @@ func fetchFloatDeletedSafe(ctx context.Context, c floatClientAPI, path string) (
 	return ids, ""
 }
 
-func (h *floatImportHandler) importFloatData(ctx context.Context, people []floatPerson, clients []floatClient, projects []floatProject, tasks []floatTask, timeOffs []floatTimeOff, timeOffTypes []floatTimeOffType, milestones []floatMilestone, loggedTime []floatLoggedTime, deletedTaskIDs []int64, deletedTimeOffIDs []int64, deletedLoggedTimeIDs []int64, fromDate pgtype.Date, toDate pgtype.Date) (floatImportResult, error) {
+func (h *floatImportHandler) importFloatData(ctx context.Context, people []floatPerson, clients []floatClient, projects []floatProject, tasks []floatTask, timeOffs []floatTimeOff, timeOffTypes []floatTimeOffType, milestones []floatMilestone, phases []floatPhase, loggedTime []floatLoggedTime, deletedTaskIDs []int64, deletedTimeOffIDs []int64, deletedLoggedTimeIDs []int64, fromDate pgtype.Date, toDate pgtype.Date) (floatImportResult, error) {
 	tx, err := h.pool.Begin(ctx)
 	if err != nil {
 		return floatImportResult{}, err
@@ -568,6 +595,89 @@ func (h *floatImportHandler) importFloatData(ctx context.Context, people []float
 		}
 	}
 
+	phasesByFloatID := map[int]pgtype.UUID{}
+	for _, fp := range phases {
+		projectID, ok := projectsByFloatID[fp.ProjectID]
+		if !ok || fp.ID == 0 || strings.TrimSpace(fp.Name) == "" {
+			result.PhasesSkipped++
+			continue
+		}
+		// Skip if we've already imported this phase (matched by Float ID).
+		existing, err := q.GetPhaseByFloatID(ctx, pgtype.Int8{Int64: int64(fp.ID), Valid: true})
+		if err == nil {
+			phasesByFloatID[fp.ID] = existing.ID
+			result.PhasesSkipped++
+			continue
+		} else if !errors.Is(err, pgx.ErrNoRows) {
+			return result, err
+		}
+		// Also dedupe by (project, name) so a re-import without Float ID
+		// linkage doesn't create duplicates.
+		existingPhases, err := q.ListPhasesByProject(ctx, projectID)
+		if err != nil {
+			return result, err
+		}
+		dupID := pgtype.UUID{}
+		for _, ep := range existingPhases {
+			if normalizeKey(ep.Name) == normalizeKey(fp.Name) {
+				dupID = ep.ID
+				break
+			}
+		}
+		if dupID.Valid {
+			phasesByFloatID[fp.ID] = dupID
+			if err := q.SetPhaseFloatID(ctx, dupID, int64(fp.ID)); err != nil {
+				return result, err
+			}
+			result.PhasesSkipped++
+			continue
+		}
+		params := db.CreatePhaseParams{
+			ProjectID: projectID,
+			Name:      strings.TrimSpace(fp.Name),
+			Color:     normalizeFloatColor(fp.Color),
+			Notes:     strings.TrimSpace(fp.Notes),
+			Billable:  true,
+			Status:    2,
+		}
+		if fp.StartDate != "" {
+			if parsed, err := parseDate(fp.StartDate); err == nil {
+				params.StartDate = parsed
+			}
+		}
+		if fp.EndDate != "" {
+			if parsed, err := parseDate(fp.EndDate); err == nil {
+				params.EndDate = parsed
+			}
+		}
+		if fp.NonBillable != nil && *fp.NonBillable == 1 {
+			params.Billable = false
+		}
+		if fp.Status != nil {
+			params.Status = int16(*fp.Status)
+		}
+		if n, err := numericFromFloat(fp.BudgetTotal); err == nil {
+			params.BudgetTotal = n
+		}
+		if n, err := numericFromFloat(fp.DefaultHourlyRate); err == nil {
+			params.DefaultHourlyRate = n
+		}
+		created, err := q.CreatePhase(ctx, params)
+		if err != nil {
+			return result, err
+		}
+		if err := q.SetPhaseFloatID(ctx, created.ID, int64(fp.ID)); err != nil {
+			return result, err
+		}
+		if fp.Active != nil && *fp.Active == 0 {
+			if archived, err := q.ArchivePhase(ctx, created.ID); err == nil {
+				created = archived
+			}
+		}
+		phasesByFloatID[fp.ID] = created.ID
+		result.PhasesCreated++
+	}
+
 	for _, fm := range milestones {
 		projectID, ok := projectsByFloatID[fm.ProjectID]
 		if !ok {
@@ -606,8 +716,15 @@ func (h *floatImportHandler) importFloatData(ctx context.Context, people []float
 				endDate = parsed
 			}
 		}
+		var phaseID pgtype.UUID
+		if fm.PhaseID != 0 {
+			if pid, ok := phasesByFloatID[fm.PhaseID]; ok {
+				phaseID = pid
+			}
+		}
 		if _, err := q.CreateMilestone(ctx, db.CreateMilestoneParams{
 			ProjectID: projectID,
+			PhaseID:   phaseID,
 			Name:      name,
 			Date:      date,
 			EndDate:   endDate,
