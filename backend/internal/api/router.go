@@ -68,6 +68,7 @@ func NewRouter(d Deps) http.Handler {
 	floatImport := newFloatImportHandler(q, d.Pool)
 	milestones := newMilestonesHandler(q)
 	deleted := newDeletedHandler(q)
+	loggedTime := newLoggedTimeHandler(q)
 
 	r.Route("/api", func(r chi.Router) {
 		r.Use(d.Verifier.Middleware)
@@ -79,6 +80,7 @@ func NewRouter(d Deps) http.Handler {
 		r.Route("/milestones", milestones.itemRoutes)
 		r.Route("/assignments", assignments.routes)
 		r.Route("/time-off", timeOff.routes)
+		r.Route("/logged-time", loggedTime.routes)
 		r.Get("/reports/utilization", reports.utilizationJSON)
 		r.Get("/reports/utilization.csv", reports.utilizationCSV)
 		r.Get("/reports/assignments.csv", reports.assignmentsCSV)

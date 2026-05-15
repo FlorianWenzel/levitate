@@ -186,6 +186,48 @@ RETURNING *;
 -- name: DeleteMilestone :exec
 DELETE FROM milestones WHERE id = $1;
 
+-- ===== logged_time =====
+
+-- name: ListLoggedTime :many
+SELECT * FROM logged_time
+WHERE
+    (sqlc.narg(person_id)::uuid IS NULL OR person_id = sqlc.narg(person_id)::uuid)
+    AND (sqlc.narg(project_id)::uuid IS NULL OR project_id = sqlc.narg(project_id)::uuid)
+    AND (sqlc.narg(date_from)::date IS NULL OR date >= sqlc.narg(date_from)::date)
+    AND (sqlc.narg(date_to)::date IS NULL OR date <= sqlc.narg(date_to)::date)
+ORDER BY date ASC, id ASC;
+
+-- name: GetLoggedTime :one
+SELECT * FROM logged_time WHERE id = $1;
+
+-- name: CreateLoggedTime :one
+INSERT INTO logged_time (person_id, date, hours, billable, notes, project_id)
+VALUES ($1, $2, $3, $4, $5, $6)
+RETURNING *;
+
+-- name: UpdateLoggedTime :one
+UPDATE logged_time
+SET date       = $2,
+    hours      = $3,
+    billable   = $4,
+    notes      = $5,
+    project_id = $6,
+    updated_at = now()
+WHERE id = $1
+RETURNING *;
+
+-- name: DeleteLoggedTime :exec
+DELETE FROM logged_time WHERE id = $1;
+
+-- name: DeleteLoggedTimeByFloatID :exec
+DELETE FROM logged_time WHERE float_id = ANY(sqlc.arg(float_ids)::bigint[]);
+
+-- name: SetLoggedTimeFloatID :exec
+UPDATE logged_time SET float_id = $2 WHERE id = $1;
+
+-- name: GetLoggedTimeByFloatID :one
+SELECT * FROM logged_time WHERE float_id = $1;
+
 -- ===== deleted_log =====
 
 -- name: InsertDeletedLog :one

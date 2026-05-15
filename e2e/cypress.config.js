@@ -73,6 +73,17 @@ const floatMockData = {
       end_date: '',
     },
   ],
+  '/logged-time': [
+    {
+      logged_time_id: 801,
+      people_id: 101,
+      project_id: 301,
+      date: '2026-06-02',
+      hours: 4,
+      billable: 1,
+      notes: 'Mock logged time',
+    },
+  ],
 }
 
 function startFloatMock() {

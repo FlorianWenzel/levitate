@@ -105,11 +105,36 @@ export type FloatImportResult = {
   projects_skipped: number
   assignments_created: number
   assignments_skipped: number
+  assignments_deleted: number
   time_off_created: number
   time_off_skipped: number
+  time_off_deleted: number
   milestones_created: number
   milestones_skipped: number
+  logged_time_created: number
+  logged_time_skipped: number
+  logged_time_deleted: number
   warnings: string[]
+}
+
+export type LoggedTime = {
+  id: string
+  person_id: string
+  project_id: string | null
+  date: string
+  hours: number
+  billable: boolean
+  notes: string
+  created_at: string
+  updated_at: string
+}
+
+export type LoggedTimeInput = {
+  person_id: string
+  date: string
+  hours: number
+  notes?: string
+  project_id?: string | null
 }
 
 export type Milestone = {
