@@ -185,3 +185,44 @@ RETURNING *;
 
 -- name: DeleteMilestone :exec
 DELETE FROM milestones WHERE id = $1;
+
+-- ===== deleted_log =====
+
+-- name: InsertDeletedLog :one
+INSERT INTO deleted_log (entity_type, entity_id)
+VALUES ($1, $2)
+RETURNING *;
+
+-- name: ListDeletedLog :many
+SELECT * FROM deleted_log
+WHERE entity_type = sqlc.arg(entity_type)::text
+  AND deleted_at > now() - INTERVAL '72 hours'
+  AND (
+        sqlc.arg(after_ts)::timestamptz IS NULL
+     OR deleted_at > sqlc.arg(after_ts)::timestamptz
+     OR (deleted_at = sqlc.arg(after_ts)::timestamptz AND id > sqlc.arg(after_id)::uuid)
+  )
+ORDER BY deleted_at ASC, id ASC
+LIMIT sqlc.arg(row_limit)::int;
+
+-- name: PurgeDeletedLog :exec
+DELETE FROM deleted_log
+WHERE deleted_at <= now() - INTERVAL '72 hours';
+
+-- name: DeleteAssignmentsByID :exec
+DELETE FROM assignments WHERE id = ANY(sqlc.arg(ids)::uuid[]);
+
+-- name: DeleteTimeOffByID :exec
+DELETE FROM time_off WHERE id = ANY(sqlc.arg(ids)::uuid[]);
+
+-- name: DeleteAssignmentsByFloatID :exec
+DELETE FROM assignments WHERE float_id = ANY(sqlc.arg(float_ids)::bigint[]);
+
+-- name: DeleteTimeOffByFloatID :exec
+DELETE FROM time_off WHERE float_id = ANY(sqlc.arg(float_ids)::bigint[]);
+
+-- name: SetAssignmentFloatID :exec
+UPDATE assignments SET float_id = $2 WHERE id = $1;
+
+-- name: SetTimeOffFloatID :exec
+UPDATE time_off SET float_id = $2 WHERE id = $1;

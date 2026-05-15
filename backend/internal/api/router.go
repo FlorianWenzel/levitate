@@ -41,7 +41,7 @@ func NewRouter(d Deps) http.Handler {
 		AllowedOrigins:   nonEmpty(d.CORSOrigins, []string{"*"}),
 		AllowedMethods:   []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
 		AllowedHeaders:   []string{"Authorization", "Content-Type"},
-		ExposedHeaders:   []string{"Content-Disposition"},
+		ExposedHeaders:   []string{"Content-Disposition", "X-Pagination-Next-Cursor", "X-Pagination-Has-More"},
 		AllowCredentials: false,
 		MaxAge:           300,
 	}))
@@ -67,6 +67,7 @@ func NewRouter(d Deps) http.Handler {
 	reports := newReportsHandler(q)
 	floatImport := newFloatImportHandler(q, d.Pool)
 	milestones := newMilestonesHandler(q)
+	deleted := newDeletedHandler(q)
 
 	r.Route("/api", func(r chi.Router) {
 		r.Use(d.Verifier.Middleware)
@@ -84,6 +85,7 @@ func NewRouter(d Deps) http.Handler {
 		r.Group(func(r chi.Router) {
 			r.Use(auth.RequireRole(auth.RoleAdmin))
 			r.Post("/import/float", floatImport.importFloat)
+			r.Route("/deleted", deleted.routes)
 		})
 	})
 
