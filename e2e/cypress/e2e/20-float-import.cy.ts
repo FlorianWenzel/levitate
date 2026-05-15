@@ -23,6 +23,7 @@ describe('Float import', () => {
           projects_created: 2,
           assignments_created: 1,
           time_off_created: 1,
+          logged_time_created: 1,
         })
       })
 
@@ -97,12 +98,13 @@ describe('Float import', () => {
       cy.contains('label', 'API base URL').siblings('input').first().clear().type(String(baseUrl))
       cy.contains('button', 'Import Float data').click()
 
-      cy.contains('Imported 6 records').should('be.visible')
+      cy.contains('Imported 7 records').should('be.visible')
       cy.contains('tr', 'People').contains('1')
       cy.contains('tr', 'Projects').contains('2')
       cy.contains('tr', 'Assignments').contains('1')
       cy.contains('tr', 'Time off').contains('1')
       cy.contains('tr', 'Milestones').contains('1')
+      cy.contains('tr', 'Logged time').contains('1')
     })
   })
 })

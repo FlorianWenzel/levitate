@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -54,6 +55,9 @@ type floatImportResult struct {
 	TimeOffDeleted     int      `json:"time_off_deleted"`
 	MilestonesCreated  int      `json:"milestones_created"`
 	MilestonesSkipped  int      `json:"milestones_skipped"`
+	LoggedTimeCreated  int      `json:"logged_time_created"`
+	LoggedTimeSkipped  int      `json:"logged_time_skipped"`
+	LoggedTimeDeleted  int      `json:"logged_time_deleted"`
 	Warnings           []string `json:"warnings"`
 }
 
@@ -120,6 +124,16 @@ type floatMilestone struct {
 	PhaseID   int    `json:"phase_id"`
 	Date      string `json:"date"`
 	EndDate   string `json:"end_date"`
+}
+
+type floatLoggedTime struct {
+	ID        int64   `json:"logged_time_id"`
+	PersonID  int     `json:"people_id"`
+	ProjectID int     `json:"project_id"`
+	Date      string  `json:"date"`
+	Hours     float64 `json:"hours"`
+	Billable  *int    `json:"billable"`
+	Notes     string  `json:"notes"`
 }
 
 // floatDeletedEntry models Float's /deleted/<entity> response rows.
@@ -214,14 +228,25 @@ func (h *floatImportHandler) importFloat(w http.ResponseWriter, r *http.Request)
 		milestonesWarning = "Float milestones could not be loaded; imported projects were created without milestones."
 	}
 
+	loggedTime, err := fetchFloatPage[floatLoggedTime](r.Context(), c, "/logged-time", url.Values{
+		"start_date": {in.StartDate},
+		"end_date":   {in.EndDate},
+	})
+	loggedTimeWarning := ""
+	if err != nil {
+		loggedTime = nil
+		loggedTimeWarning = "Float logged time could not be loaded; timesheet entries were not imported."
+	}
+
 	// Float's delete log (72h retention) tells us which remote tasks/timeoffs
 	// have been deleted since the last sync. We surface these as warnings on
 	// failure rather than aborting the import — a working import that skips
 	// reconciliation is more useful than no import at all.
 	deletedTasks, deletedTasksWarning := fetchFloatDeletedSafe(r.Context(), c, "/deleted/tasks")
 	deletedTimeOffs, deletedTimeOffsWarning := fetchFloatDeletedSafe(r.Context(), c, "/deleted/timeoffs")
+	deletedLoggedTime, deletedLoggedTimeWarning := fetchFloatDeletedSafe(r.Context(), c, "/deleted/logged-time")
 
-	result, err := h.importFloatData(r.Context(), people, clients, projects, tasks, timeOffs, timeOffTypes, milestones, deletedTasks, deletedTimeOffs, fromDate, toDate)
+	result, err := h.importFloatData(r.Context(), people, clients, projects, tasks, timeOffs, timeOffTypes, milestones, loggedTime, deletedTasks, deletedTimeOffs, deletedLoggedTime, fromDate, toDate)
 	if err != nil {
 		WriteProblem(w, r, http.StatusInternalServerError, "import_failed", err.Error())
 		return
@@ -237,6 +262,12 @@ func (h *floatImportHandler) importFloat(w http.ResponseWriter, r *http.Request)
 	}
 	if deletedTimeOffsWarning != "" {
 		result.Warnings = append(result.Warnings, deletedTimeOffsWarning)
+	}
+	if loggedTimeWarning != "" {
+		result.Warnings = append(result.Warnings, loggedTimeWarning)
+	}
+	if deletedLoggedTimeWarning != "" {
+		result.Warnings = append(result.Warnings, deletedLoggedTimeWarning)
 	}
 	writeJSON(w, http.StatusOK, result)
 }
@@ -259,7 +290,7 @@ func fetchFloatDeletedSafe(ctx context.Context, c floatClientAPI, path string) (
 	return ids, ""
 }
 
-func (h *floatImportHandler) importFloatData(ctx context.Context, people []floatPerson, clients []floatClient, projects []floatProject, tasks []floatTask, timeOffs []floatTimeOff, timeOffTypes []floatTimeOffType, milestones []floatMilestone, deletedTaskIDs []int64, deletedTimeOffIDs []int64, fromDate pgtype.Date, toDate pgtype.Date) (floatImportResult, error) {
+func (h *floatImportHandler) importFloatData(ctx context.Context, people []floatPerson, clients []floatClient, projects []floatProject, tasks []floatTask, timeOffs []floatTimeOff, timeOffTypes []floatTimeOffType, milestones []floatMilestone, loggedTime []floatLoggedTime, deletedTaskIDs []int64, deletedTimeOffIDs []int64, deletedLoggedTimeIDs []int64, fromDate pgtype.Date, toDate pgtype.Date) (floatImportResult, error) {
 	tx, err := h.pool.Begin(ctx)
 	if err != nil {
 		return floatImportResult{}, err
@@ -292,6 +323,16 @@ func (h *floatImportHandler) importFloatData(ctx context.Context, people []float
 			return result, err
 		}
 		result.TimeOffDeleted = before
+	}
+	if len(deletedLoggedTimeIDs) > 0 {
+		before, err := countRowsByFloatID(ctx, tx, "logged_time", deletedLoggedTimeIDs)
+		if err != nil {
+			return result, err
+		}
+		if err := q.DeleteLoggedTimeByFloatID(ctx, deletedLoggedTimeIDs); err != nil {
+			return result, err
+		}
+		result.LoggedTimeDeleted = before
 	}
 
 	existingPeople, err := q.ListPeople(ctx, true)
@@ -574,6 +615,94 @@ func (h *floatImportHandler) importFloatData(ctx context.Context, people []float
 			return result, err
 		}
 		result.MilestonesCreated++
+	}
+
+	// Track billable inheritance per Float project so we can stamp the value
+	// on each imported logged-time row (Float's API treats billability as a
+	// read-only projection of the project/phase/task).
+	projectBillableByFloatID := map[int]bool{}
+	for _, fp := range projects {
+		billable := true
+		if fp.NonBillable != nil && *fp.NonBillable == 1 {
+			billable = false
+		}
+		projectBillableByFloatID[fp.ID] = billable
+	}
+
+	for _, fl := range loggedTime {
+		if fl.PersonID == 0 || fl.Date == "" || fl.Hours <= 0 {
+			result.LoggedTimeSkipped++
+			continue
+		}
+		personID, ok := peopleByFloatID[fl.PersonID]
+		if !ok {
+			result.LoggedTimeSkipped++
+			continue
+		}
+		date, err := parseDate(fl.Date)
+		if err != nil {
+			result.LoggedTimeSkipped++
+			continue
+		}
+		hours, _ := numericFromFloat(fl.Hours)
+
+		var projectID pgtype.UUID
+		billable := false
+		if fl.ProjectID != 0 {
+			if pid, ok := projectsByFloatID[fl.ProjectID]; ok {
+				projectID = pid
+				if b, ok := projectBillableByFloatID[fl.ProjectID]; ok {
+					billable = b
+				}
+			}
+		}
+		// Float reports billability on the logged-time row too; trust it if
+		// present (e.g. the project link wasn't resolvable), otherwise we
+		// inherit from the project we just looked up.
+		if fl.Billable != nil {
+			billable = *fl.Billable == 1
+		}
+		notes := strings.TrimSpace(fl.Notes)
+
+		// Upsert by Float ID: if we've already imported this row, update in
+		// place so a re-sync picks up edits made in Float.
+		if fl.ID != 0 {
+			existing, err := q.GetLoggedTimeByFloatID(ctx, pgtype.Int8{Int64: fl.ID, Valid: true})
+			if err == nil {
+				if _, err := q.UpdateLoggedTime(ctx, db.UpdateLoggedTimeParams{
+					ID:        existing.ID,
+					Date:      date,
+					Hours:     hours,
+					Billable:  billable,
+					Notes:     notes,
+					ProjectID: projectID,
+				}); err != nil {
+					return result, err
+				}
+				result.LoggedTimeSkipped++
+				continue
+			} else if !errors.Is(err, pgx.ErrNoRows) {
+				return result, err
+			}
+		}
+
+		created, err := q.CreateLoggedTime(ctx, db.CreateLoggedTimeParams{
+			PersonID:  personID,
+			Date:      date,
+			Hours:     hours,
+			Billable:  billable,
+			Notes:     notes,
+			ProjectID: projectID,
+		})
+		if err != nil {
+			return result, err
+		}
+		if fl.ID != 0 {
+			if err := q.SetLoggedTimeFloatID(ctx, created.ID, fl.ID); err != nil {
+				return result, err
+			}
+		}
+		result.LoggedTimeCreated++
 	}
 
 	if err := tx.Commit(ctx); err != nil {
