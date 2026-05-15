@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/florianwenzel/levitate/backend/internal/db"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -47,8 +48,10 @@ type floatImportResult struct {
 	ProjectsSkipped    int      `json:"projects_skipped"`
 	AssignmentsCreated int      `json:"assignments_created"`
 	AssignmentsSkipped int      `json:"assignments_skipped"`
+	AssignmentsDeleted int      `json:"assignments_deleted"`
 	TimeOffCreated     int      `json:"time_off_created"`
 	TimeOffSkipped     int      `json:"time_off_skipped"`
+	TimeOffDeleted     int      `json:"time_off_deleted"`
 	MilestonesCreated  int      `json:"milestones_created"`
 	MilestonesSkipped  int      `json:"milestones_skipped"`
 	Warnings           []string `json:"warnings"`
@@ -117,6 +120,12 @@ type floatMilestone struct {
 	PhaseID   int    `json:"phase_id"`
 	Date      string `json:"date"`
 	EndDate   string `json:"end_date"`
+}
+
+// floatDeletedEntry models Float's /deleted/<entity> response rows.
+type floatDeletedEntry struct {
+	ID        int64  `json:"id"`
+	Timestamp string `json:"timestamp"`
 }
 
 func (h *floatImportHandler) importFloat(w http.ResponseWriter, r *http.Request) {
@@ -205,7 +214,14 @@ func (h *floatImportHandler) importFloat(w http.ResponseWriter, r *http.Request)
 		milestonesWarning = "Float milestones could not be loaded; imported projects were created without milestones."
 	}
 
-	result, err := h.importFloatData(r.Context(), people, clients, projects, tasks, timeOffs, timeOffTypes, milestones, fromDate, toDate)
+	// Float's delete log (72h retention) tells us which remote tasks/timeoffs
+	// have been deleted since the last sync. We surface these as warnings on
+	// failure rather than aborting the import — a working import that skips
+	// reconciliation is more useful than no import at all.
+	deletedTasks, deletedTasksWarning := fetchFloatDeletedSafe(r.Context(), c, "/deleted/tasks")
+	deletedTimeOffs, deletedTimeOffsWarning := fetchFloatDeletedSafe(r.Context(), c, "/deleted/timeoffs")
+
+	result, err := h.importFloatData(r.Context(), people, clients, projects, tasks, timeOffs, timeOffTypes, milestones, deletedTasks, deletedTimeOffs, fromDate, toDate)
 	if err != nil {
 		WriteProblem(w, r, http.StatusInternalServerError, "import_failed", err.Error())
 		return
@@ -216,10 +232,34 @@ func (h *floatImportHandler) importFloat(w http.ResponseWriter, r *http.Request)
 	if milestonesWarning != "" {
 		result.Warnings = append(result.Warnings, milestonesWarning)
 	}
+	if deletedTasksWarning != "" {
+		result.Warnings = append(result.Warnings, deletedTasksWarning)
+	}
+	if deletedTimeOffsWarning != "" {
+		result.Warnings = append(result.Warnings, deletedTimeOffsWarning)
+	}
 	writeJSON(w, http.StatusOK, result)
 }
 
-func (h *floatImportHandler) importFloatData(ctx context.Context, people []floatPerson, clients []floatClient, projects []floatProject, tasks []floatTask, timeOffs []floatTimeOff, timeOffTypes []floatTimeOffType, milestones []floatMilestone, fromDate pgtype.Date, toDate pgtype.Date) (floatImportResult, error) {
+// fetchFloatDeletedSafe paginates a Float /deleted/* endpoint and returns the
+// IDs to reconcile. Float advertises cursor-based pagination here (cursor +
+// limit, max 500), but if the endpoint is unavailable we return a soft
+// warning instead of aborting the whole import.
+func fetchFloatDeletedSafe(ctx context.Context, c floatClientAPI, path string) ([]int64, string) {
+	rows, err := fetchFloatDeleted(ctx, c, path)
+	if err != nil {
+		return nil, fmt.Sprintf("Float %s could not be loaded; remote deletions were not reconciled.", path)
+	}
+	ids := make([]int64, 0, len(rows))
+	for _, r := range rows {
+		if r.ID != 0 {
+			ids = append(ids, r.ID)
+		}
+	}
+	return ids, ""
+}
+
+func (h *floatImportHandler) importFloatData(ctx context.Context, people []floatPerson, clients []floatClient, projects []floatProject, tasks []floatTask, timeOffs []floatTimeOff, timeOffTypes []floatTimeOffType, milestones []floatMilestone, deletedTaskIDs []int64, deletedTimeOffIDs []int64, fromDate pgtype.Date, toDate pgtype.Date) (floatImportResult, error) {
 	tx, err := h.pool.Begin(ctx)
 	if err != nil {
 		return floatImportResult{}, err
@@ -230,6 +270,29 @@ func (h *floatImportHandler) importFloatData(ctx context.Context, people []float
 	result := floatImportResult{}
 	peopleByFloatID := map[int]pgtype.UUID{}
 	projectsByFloatID := map[int]pgtype.UUID{}
+
+	// Reconcile remote deletions first so a remote delete+recreate (same
+	// natural key) doesn't get short-circuited by our dedup logic below.
+	if len(deletedTaskIDs) > 0 {
+		before, err := countRowsByFloatID(ctx, tx, "assignments", deletedTaskIDs)
+		if err != nil {
+			return result, err
+		}
+		if err := q.DeleteAssignmentsByFloatID(ctx, deletedTaskIDs); err != nil {
+			return result, err
+		}
+		result.AssignmentsDeleted = before
+	}
+	if len(deletedTimeOffIDs) > 0 {
+		before, err := countRowsByFloatID(ctx, tx, "time_off", deletedTimeOffIDs)
+		if err != nil {
+			return result, err
+		}
+		if err := q.DeleteTimeOffByFloatID(ctx, deletedTimeOffIDs); err != nil {
+			return result, err
+		}
+		result.TimeOffDeleted = before
+	}
 
 	existingPeople, err := q.ListPeople(ctx, true)
 	if err != nil {
@@ -379,7 +442,7 @@ func (h *floatImportHandler) importFloatData(ctx context.Context, people []float
 				result.AssignmentsSkipped++
 				continue
 			}
-			_, err := q.CreateAssignment(ctx, db.CreateAssignmentParams{
+			created, err := q.CreateAssignment(ctx, db.CreateAssignmentParams{
 				PersonID:    personID,
 				ProjectID:   projectID,
 				StartDate:   startDate,
@@ -389,6 +452,11 @@ func (h *floatImportHandler) importFloatData(ctx context.Context, people []float
 			})
 			if err != nil {
 				return result, err
+			}
+			if ft.ID != 0 {
+				if err := q.SetAssignmentFloatID(ctx, created.ID, int64(ft.ID)); err != nil {
+					return result, err
+				}
 			}
 			assignmentKeys[key] = struct{}{}
 			result.AssignmentsCreated++
@@ -439,7 +507,7 @@ func (h *floatImportHandler) importFloatData(ctx context.Context, people []float
 				result.TimeOffSkipped++
 				continue
 			}
-			_, err := q.CreateTimeOff(ctx, db.CreateTimeOffParams{
+			created, err := q.CreateTimeOff(ctx, db.CreateTimeOffParams{
 				PersonID:  personID,
 				StartDate: startDate,
 				EndDate:   endDate,
@@ -448,6 +516,11 @@ func (h *floatImportHandler) importFloatData(ctx context.Context, people []float
 			})
 			if err != nil {
 				return result, err
+			}
+			if ft.ID != 0 {
+				if err := q.SetTimeOffFloatID(ctx, created.ID, int64(ft.ID)); err != nil {
+					return result, err
+				}
 			}
 			timeOffKeys[key] = struct{}{}
 			result.TimeOffCreated++
@@ -513,6 +586,71 @@ type floatClientAPI struct {
 	baseURL string
 	token   string
 	http    *http.Client
+}
+
+// countRowsByFloatID returns how many rows in the given table currently match
+// the supplied Float IDs. We use this to report how many local rows the
+// remote-deletion reconciliation actually removed (vs. how many IDs Float
+// listed — Float keeps deletions for 72h and re-delivers, so we'll often see
+// IDs that no longer exist locally).
+func countRowsByFloatID(ctx context.Context, tx interface {
+	QueryRow(context.Context, string, ...any) pgx.Row
+}, table string, floatIDs []int64) (int, error) {
+	if len(floatIDs) == 0 {
+		return 0, nil
+	}
+	var n int
+	q := "SELECT count(*) FROM " + table + " WHERE float_id = ANY($1::bigint[])"
+	if err := tx.QueryRow(ctx, q, floatIDs).Scan(&n); err != nil {
+		return 0, err
+	}
+	return n, nil
+}
+
+// fetchFloatDeleted paginates Float's cursor-based /deleted/<entity>
+// endpoint, accumulating all rows up to a hard cap on iterations.
+func fetchFloatDeleted(ctx context.Context, c floatClientAPI, path string) ([]floatDeletedEntry, error) {
+	var out []floatDeletedEntry
+	cursor := ""
+	for i := 0; i < 200; i++ {
+		params := url.Values{}
+		params.Set("limit", "500")
+		if cursor != "" {
+			params.Set("cursor", cursor)
+		}
+		u := c.baseURL + path + "?" + params.Encode()
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
+		if err != nil {
+			return nil, err
+		}
+		req.Header.Set("Authorization", "Bearer "+c.token)
+		req.Header.Set("Accept", "application/json")
+		req.Header.Set("User-Agent", "Levitate/1.0 Float Import")
+		res, err := c.http.Do(req)
+		if err != nil {
+			return nil, err
+		}
+		var page struct {
+			Data []floatDeletedEntry `json:"data"`
+		}
+		decodeErr := json.NewDecoder(res.Body).Decode(&page)
+		nextCursor := res.Header.Get("X-Pagination-Next-Cursor")
+		hasMore := strings.EqualFold(res.Header.Get("X-Pagination-Has-More"), "true")
+		status := res.StatusCode
+		res.Body.Close()
+		if status < 200 || status >= 300 {
+			return nil, fmt.Errorf("Float API returned %d for %s", status, path)
+		}
+		if decodeErr != nil {
+			return nil, decodeErr
+		}
+		out = append(out, page.Data...)
+		if !hasMore || nextCursor == "" || nextCursor == cursor {
+			break
+		}
+		cursor = nextCursor
+	}
+	return out, nil
 }
 
 func fetchFloatPage[T any](ctx context.Context, c floatClientAPI, path string, params url.Values) ([]T, error) {
