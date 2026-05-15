@@ -67,6 +67,7 @@ func NewRouter(d Deps) http.Handler {
 	reports := newReportsHandler(q)
 	floatImport := newFloatImportHandler(q, d.Pool)
 	milestones := newMilestonesHandler(q)
+	phases := newPhasesHandler(q)
 	deleted := newDeletedHandler(q)
 	loggedTime := newLoggedTimeHandler(q)
 
@@ -78,6 +79,8 @@ func NewRouter(d Deps) http.Handler {
 		r.Route("/projects", projects.routes)
 		r.Route("/projects/{id}/milestones", milestones.projectRoutes)
 		r.Route("/milestones", milestones.itemRoutes)
+		r.Route("/projects/{id}/phases", phases.projectRoutes)
+		r.Route("/phases", phases.itemRoutes)
 		r.Route("/assignments", assignments.routes)
 		r.Route("/time-off", timeOff.routes)
 		r.Route("/logged-time", loggedTime.routes)

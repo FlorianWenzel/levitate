@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { useAuthStore } from '~/stores/auth'
-import type { Milestone, MilestoneInput, Project } from '~/types/api'
+import type { Milestone, MilestoneInput, Phase, PhaseInput, Project } from '~/types/api'
 
 const auth = useAuthStore()
 const { call } = useApi()
@@ -10,6 +10,7 @@ const projectID = computed(() => String(route.params.id))
 
 const project = ref<Project | null>(null)
 const milestones = ref<Milestone[]>([])
+const phases = ref<Phase[]>([])
 const loading = ref(false)
 const error = ref<string | null>(null)
 
@@ -17,20 +18,40 @@ const showForm = ref(false)
 const editing = ref<Milestone | null>(null)
 const form = ref<MilestoneInput>(emptyForm())
 
+const showPhaseForm = ref(false)
+const editingPhase = ref<Phase | null>(null)
+const phaseForm = ref<PhaseInput>(emptyPhaseForm())
+
 function emptyForm(): MilestoneInput {
   return { name: '', date: '', end_date: '' }
+}
+
+function emptyPhaseForm(): PhaseInput {
+  return {
+    name: '',
+    color: '#0EA5E9',
+    notes: '',
+    start_date: '',
+    end_date: '',
+    budget_total: 0,
+    default_hourly_rate: 0,
+    non_billable: false,
+    status: 2,
+  }
 }
 
 async function load() {
   loading.value = true
   error.value = null
   try {
-    const [p, m] = await Promise.all([
+    const [p, m, ph] = await Promise.all([
       call<Project>(`/api/projects/${projectID.value}`),
       call<Milestone[]>(`/api/projects/${projectID.value}/milestones`),
+      call<Phase[]>(`/api/projects/${projectID.value}/phases`),
     ])
     project.value = p
     milestones.value = m
+    phases.value = ph ?? []
   } catch (e: any) {
     error.value = e?.data?.detail ?? e?.message ?? 'Failed to load'
   } finally {
@@ -81,6 +102,67 @@ async function remove(m: Milestone) {
   } catch (e: any) {
     alert(e?.data?.detail ?? e?.message ?? 'Delete failed')
   }
+}
+
+function openCreatePhase() {
+  editingPhase.value = null
+  phaseForm.value = emptyPhaseForm()
+  showPhaseForm.value = true
+}
+
+function openEditPhase(p: Phase) {
+  editingPhase.value = p
+  phaseForm.value = {
+    name: p.name,
+    color: p.color,
+    notes: p.notes,
+    start_date: p.start_date ?? '',
+    end_date: p.end_date ?? '',
+    budget_total: p.budget_total,
+    default_hourly_rate: p.default_hourly_rate,
+    non_billable: p.non_billable,
+    status: p.status,
+  }
+  showPhaseForm.value = true
+}
+
+async function submitPhase() {
+  try {
+    const body: PhaseInput = {
+      name: phaseForm.value.name,
+      color: phaseForm.value.color,
+      notes: phaseForm.value.notes,
+      start_date: phaseForm.value.start_date ? phaseForm.value.start_date : null,
+      end_date: phaseForm.value.end_date ? phaseForm.value.end_date : null,
+      budget_total: Number(phaseForm.value.budget_total ?? 0),
+      default_hourly_rate: Number(phaseForm.value.default_hourly_rate ?? 0),
+      non_billable: !!phaseForm.value.non_billable,
+      status: phaseForm.value.status ?? 2,
+    }
+    if (editingPhase.value) {
+      await call(`/api/phases/${editingPhase.value.id}`, { method: 'PATCH', body })
+    } else {
+      await call(`/api/projects/${projectID.value}/phases`, { method: 'POST', body })
+    }
+    showPhaseForm.value = false
+    await load()
+  } catch (e: any) {
+    alert(e?.data?.detail ?? e?.message ?? 'Save failed')
+  }
+}
+
+async function removePhase(p: Phase) {
+  if (!confirm(`Delete phase "${p.name}"?`)) return
+  try {
+    await call(`/api/phases/${p.id}`, { method: 'DELETE' })
+    await load()
+  } catch (e: any) {
+    alert(e?.data?.detail ?? e?.message ?? 'Delete failed')
+  }
+}
+
+function phaseStatusLabel(s: 0 | 1 | 2): string {
+  return s === 0 ? 'Draft' : s === 1 ? 'Tentative' : 'Confirmed'
 }
 
 onMounted(load)
@@ -159,6 +241,189 @@ onMounted(load)
         </table>
       </div>
     </section>
+
+    <section class="mt-8" data-cy="phases-section">
+      <div class="flex items-center justify-between">
+        <div>
+          <h2 class="text-lg font-semibold text-slate-900">Phases</h2>
+          <p class="text-sm text-slate-500">Time-bounded slices of the project with their own budget and rate.</p>
+        </div>
+        <button
+          v-if="auth.isAdmin"
+          data-cy="phase-create"
+          class="rounded bg-slate-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-slate-700"
+          @click="openCreatePhase"
+        >
+          + New phase
+        </button>
+      </div>
+
+      <div class="mt-4 overflow-hidden rounded border border-slate-200 bg-white">
+        <table class="w-full text-sm">
+          <thead class="bg-slate-50 text-left text-xs uppercase tracking-wider text-slate-500">
+            <tr>
+              <th class="px-4 py-2"></th>
+              <th class="px-4 py-2">Name</th>
+              <th class="px-4 py-2">Start</th>
+              <th class="px-4 py-2">End</th>
+              <th class="px-4 py-2">Budget</th>
+              <th class="px-4 py-2">Status</th>
+              <th class="px-4 py-2"></th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-slate-100">
+            <tr v-if="loading">
+              <td colspan="7" class="px-4 py-6 text-center text-slate-400">Loading…</td>
+            </tr>
+            <tr v-else-if="!phases.length">
+              <td colspan="7" class="px-4 py-6 text-center text-slate-400" data-cy="phases-empty">
+                No phases yet.
+              </td>
+            </tr>
+            <tr
+              v-for="p in phases"
+              :key="p.id"
+              class="hover:bg-slate-50"
+              :data-cy="`phase-row-${p.name}`"
+            >
+              <td class="px-4 py-2">
+                <span class="inline-block h-4 w-4 rounded" :style="{ background: p.color || '#94A3B8' }"></span>
+              </td>
+              <td class="px-4 py-2 font-medium text-slate-900" data-cy="phase-name">{{ p.name }}</td>
+              <td class="px-4 py-2 text-slate-600" data-cy="phase-start-date">{{ p.start_date || '—' }}</td>
+              <td class="px-4 py-2 text-slate-600" data-cy="phase-end-date">{{ p.end_date || '—' }}</td>
+              <td class="px-4 py-2 text-slate-600" data-cy="phase-budget">{{ p.budget_total }}</td>
+              <td class="px-4 py-2">
+                <span data-cy="phase-status" class="rounded bg-slate-100 px-1.5 py-0.5 text-xs text-slate-700">
+                  {{ phaseStatusLabel(p.status) }}
+                </span>
+                <span
+                  v-if="p.non_billable"
+                  class="ml-1 rounded bg-amber-100 px-1.5 py-0.5 text-xs text-amber-700"
+                >Non-billable</span>
+              </td>
+              <td class="px-4 py-2 text-right">
+                <div v-if="auth.isAdmin" class="flex justify-end gap-2 text-xs">
+                  <button class="text-slate-600 hover:underline" :data-cy="`phase-edit-${p.name}`" @click="openEditPhase(p)">Edit</button>
+                  <button class="text-red-600 hover:underline" :data-cy="`phase-delete-${p.name}`" @click="removePhase(p)">Delete</button>
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <div
+      v-if="showPhaseForm"
+      class="fixed inset-0 z-10 flex items-center justify-center bg-slate-900/40 p-4"
+      @click.self="showPhaseForm = false"
+    >
+      <div class="w-full max-w-md rounded-lg bg-white p-6 shadow-xl" data-cy="phase-form">
+        <h2 class="text-lg font-semibold text-slate-900">
+          {{ editingPhase ? 'Edit phase' : 'New phase' }}
+        </h2>
+        <form class="mt-4 space-y-3 text-sm" @submit.prevent="submitPhase">
+          <div>
+            <label class="block text-xs font-medium text-slate-600">Name</label>
+            <input
+              v-model="phaseForm.name"
+              data-cy="phase-name-input"
+              class="mt-1 w-full rounded border border-slate-300 px-2 py-1.5"
+              required
+            >
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-slate-600">Color</label>
+            <div class="mt-1 flex items-center gap-2">
+              <input v-model="phaseForm.color" type="color" class="h-9 w-12 rounded border border-slate-300">
+              <input v-model="phaseForm.color" data-cy="phase-color-input" class="flex-1 rounded border border-slate-300 px-2 py-1.5 font-mono text-xs">
+            </div>
+          </div>
+          <div class="grid grid-cols-2 gap-2">
+            <div>
+              <label class="block text-xs font-medium text-slate-600">Start date</label>
+              <input
+                v-model="phaseForm.start_date"
+                type="date"
+                data-cy="phase-start-date-input"
+                class="mt-1 w-full rounded border border-slate-300 px-2 py-1.5"
+              >
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-slate-600">End date</label>
+              <input
+                v-model="phaseForm.end_date"
+                type="date"
+                data-cy="phase-end-date-input"
+                class="mt-1 w-full rounded border border-slate-300 px-2 py-1.5"
+              >
+            </div>
+          </div>
+          <div class="grid grid-cols-2 gap-2">
+            <div>
+              <label class="block text-xs font-medium text-slate-600">Budget total</label>
+              <input
+                v-model.number="phaseForm.budget_total"
+                type="number"
+                min="0"
+                step="0.01"
+                data-cy="phase-budget-input"
+                class="mt-1 w-full rounded border border-slate-300 px-2 py-1.5"
+              >
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-slate-600">Default hourly rate</label>
+              <input
+                v-model.number="phaseForm.default_hourly_rate"
+                type="number"
+                min="0"
+                step="0.01"
+                data-cy="phase-rate-input"
+                class="mt-1 w-full rounded border border-slate-300 px-2 py-1.5"
+              >
+            </div>
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-slate-600">Status</label>
+            <select
+              v-model.number="phaseForm.status"
+              data-cy="phase-status-input"
+              class="mt-1 w-full rounded border border-slate-300 px-2 py-1.5"
+            >
+              <option :value="0">Draft</option>
+              <option :value="1">Tentative</option>
+              <option :value="2">Confirmed</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-slate-600">Notes</label>
+            <textarea
+              v-model="phaseForm.notes"
+              rows="3"
+              data-cy="phase-notes-input"
+              class="mt-1 w-full rounded border border-slate-300 px-2 py-1.5"
+            ></textarea>
+          </div>
+          <div>
+            <label class="flex items-center gap-2 text-xs font-medium text-slate-600">
+              <input v-model="phaseForm.non_billable" data-cy="phase-non-billable-input" type="checkbox" class="rounded">
+              Non-billable
+            </label>
+          </div>
+          <div class="flex justify-end gap-2 pt-2">
+            <button type="button" class="rounded px-3 py-1.5 text-slate-600 hover:bg-slate-100" @click="showPhaseForm = false">Cancel</button>
+            <button
+              type="submit"
+              data-cy="phase-save"
+              class="rounded bg-slate-900 px-3 py-1.5 text-white hover:bg-slate-700"
+            >
+              Save
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
 
     <div
       v-if="showForm"
