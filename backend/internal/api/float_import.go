@@ -83,6 +83,7 @@ type floatClient struct {
 type floatProject struct {
 	ID             int      `json:"project_id"`
 	Name           string   `json:"name"`
+	ProjectCode    string   `json:"project_code"`
 	ClientID       int      `json:"client_id"`
 	Color          string   `json:"color"`
 	Notes          string   `json:"notes"`
@@ -481,6 +482,9 @@ func (h *floatImportHandler) importFloatData(ctx context.Context, people []float
 			if n, err := numericFromFloat(*fp.BudgetTotal); err == nil {
 				params.BudgetTotal = n
 			}
+		}
+		if code := strings.TrimSpace(fp.ProjectCode); code != "" {
+			params.ProjectCode = pgtype.Text{String: code, Valid: true}
 		}
 		project, err := q.CreateProject(ctx, params)
 		if err != nil {
