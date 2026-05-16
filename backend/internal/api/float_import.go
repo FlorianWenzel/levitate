@@ -90,6 +90,7 @@ type floatProject struct {
 	BudgetType     *int     `json:"budget_type"`
 	BudgetTotal    *float64 `json:"budget_total"`
 	BudgetPriority *int     `json:"budget_priority"`
+	Tags           []string `json:"tags"`
 }
 
 type floatTask struct {
@@ -456,6 +457,7 @@ func (h *floatImportHandler) importFloatData(ctx context.Context, people []float
 			Color:    color,
 			Notes:    strings.TrimSpace(fp.Notes),
 			Billable: billable,
+			Tags:     normalizeFloatTags(fp.Tags),
 		}
 		if fp.BudgetType != nil && *fp.BudgetType >= projectBudgetTypeMin && *fp.BudgetType <= projectBudgetTypeMax {
 			params.BudgetType = pgtype.Int2{Int16: int16(*fp.BudgetType), Valid: true}
@@ -1005,6 +1007,28 @@ func normalizeFloatColor(color string) string {
 		return "#64748B"
 	}
 	return strings.ToUpper(color)
+}
+
+// normalizeFloatTags mirrors the API-side projectInput.normalizedTags: trims
+// whitespace, drops empties, and de-duplicates case-insensitively. Returns an
+// empty (non-nil) slice when no usable tags remain so the persisted value is
+// always a concrete empty array rather than NULL.
+func normalizeFloatTags(tags []string) []string {
+	out := make([]string, 0, len(tags))
+	seen := map[string]struct{}{}
+	for _, t := range tags {
+		t = strings.TrimSpace(t)
+		if t == "" {
+			continue
+		}
+		key := strings.ToLower(t)
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		out = append(out, t)
+	}
+	return out
 }
 
 func normalizeKey(s string) string {

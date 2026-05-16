@@ -25,13 +25,21 @@ const showForm = ref(false)
 const editing = ref<Project | null>(null)
 const form = ref<ProjectInput>(emptyForm())
 const budgetForm = ref<BudgetFormState>(emptyBudget())
+const tagsInput = ref('')
 
 function emptyForm(): ProjectInput {
-  return { name: '', client: '', color: '#0EA5E9', notes: '', billable: true }
+  return { name: '', client: '', color: '#0EA5E9', notes: '', billable: true, tags: [] }
 }
 
 function emptyBudget(): BudgetFormState {
   return { type: '', total: '', priority: '' }
+}
+
+function parseTagsInput(value: string): string[] {
+  return value
+    .split(',')
+    .map((t) => t.trim())
+    .filter((t) => t.length > 0)
 }
 
 function budgetTypeLabel(t: ProjectBudgetType | null): string {
@@ -64,17 +72,26 @@ function openCreate() {
   editing.value = null
   form.value = emptyForm()
   budgetForm.value = emptyBudget()
+  tagsInput.value = ''
   showForm.value = true
 }
 
 function openEdit(p: Project) {
   editing.value = p
-  form.value = { name: p.name, client: p.client, color: p.color, notes: p.notes, billable: p.billable }
+  form.value = {
+    name: p.name,
+    client: p.client,
+    color: p.color,
+    notes: p.notes,
+    billable: p.billable,
+    tags: [...(p.tags ?? [])],
+  }
   budgetForm.value = {
     type: p.budget_type ?? '',
     total: p.budget_total ?? '',
     priority: p.budget_priority ?? '',
   }
+  tagsInput.value = (p.tags ?? []).join(', ')
   showForm.value = true
 }
 
@@ -84,6 +101,7 @@ async function submit() {
     body.budget_type = budgetForm.value.type === '' ? null : (Number(budgetForm.value.type) as ProjectBudgetType)
     body.budget_total = budgetForm.value.total === '' ? null : Number(budgetForm.value.total)
     body.budget_priority = budgetForm.value.priority === '' ? null : (Number(budgetForm.value.priority) as ProjectBudgetPriority)
+    body.tags = parseTagsInput(tagsInput.value)
     if (editing.value) {
       await call(`/api/projects/${editing.value.id}`, { method: 'PATCH', body })
     } else {
@@ -146,16 +164,17 @@ onMounted(load)
             <th class="px-4 py-2">Client</th>
             <th class="px-4 py-2">Billable</th>
             <th class="px-4 py-2">Budget</th>
+            <th class="px-4 py-2">Tags</th>
             <th class="px-4 py-2">Status</th>
             <th class="px-4 py-2"></th>
           </tr>
         </thead>
         <tbody class="divide-y divide-slate-100">
           <tr v-if="loading">
-            <td colspan="7" class="px-4 py-6 text-center text-slate-400">Loading…</td>
+            <td colspan="8" class="px-4 py-6 text-center text-slate-400">Loading…</td>
           </tr>
           <tr v-else-if="!projects.length">
-            <td colspan="7" class="px-4 py-6 text-center text-slate-400">No projects yet.</td>
+            <td colspan="8" class="px-4 py-6 text-center text-slate-400">No projects yet.</td>
           </tr>
           <tr v-for="p in projects" :key="p.id" class="hover:bg-slate-50" :data-cy="`project-row-${p.name}`">
             <td class="px-4 py-2">
@@ -192,6 +211,17 @@ onMounted(load)
                 </div>
               </template>
               <span v-else class="text-slate-400">—</span>
+            </td>
+            <td class="px-4 py-2" data-cy="project-tags-cell">
+              <div v-if="p.tags && p.tags.length" class="flex flex-wrap gap-1">
+                <span
+                  v-for="t in p.tags"
+                  :key="t"
+                  data-cy="project-tag-chip"
+                  class="rounded bg-sky-100 px-1.5 py-0.5 text-xs text-sky-700"
+                >{{ t }}</span>
+              </div>
+              <span v-else class="text-slate-400 text-xs">—</span>
             </td>
             <td class="px-4 py-2">
               <span v-if="p.status === 'archived'" class="rounded bg-slate-200 px-1.5 py-0.5 text-xs text-slate-700">Archived</span>
@@ -239,6 +269,15 @@ onMounted(load)
               <input v-model="form.billable" type="checkbox" data-cy="billable-toggle" class="rounded">
               Billable
             </label>
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-slate-600">Tags</label>
+            <input
+              v-model="tagsInput"
+              data-cy="project-tags-input"
+              placeholder="Comma-separated, e.g. design, frontend"
+              class="mt-1 w-full rounded border border-slate-300 px-2 py-1.5"
+            >
           </div>
           <fieldset class="space-y-2 rounded border border-slate-200 p-3" data-cy="project-budget-fieldset">
             <legend class="px-1 text-xs font-medium text-slate-600">Budget</legend>

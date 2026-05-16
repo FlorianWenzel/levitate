@@ -35,7 +35,7 @@ func (q *Queries) ArchivePerson(ctx context.Context, id pgtype.UUID) (Person, er
 	return i, err
 }
 
-const projectSelectCols = `id, name, client, color, notes, archived_at, created_at, updated_at, billable, budget_type, budget_total, budget_priority`
+const projectSelectCols = `id, name, client, color, notes, archived_at, created_at, updated_at, billable, budget_type, budget_total, budget_priority, tags`
 
 func scanProject(scanner interface {
 	Scan(dest ...any) error
@@ -54,6 +54,7 @@ func scanProject(scanner interface {
 		&p.BudgetType,
 		&p.BudgetTotal,
 		&p.BudgetPriority,
+		&p.Tags,
 	)
 	return p, err
 }
@@ -180,8 +181,8 @@ func (q *Queries) CreatePerson(ctx context.Context, arg CreatePersonParams) (Per
 }
 
 const createProject = `-- name: CreateProject :one
-INSERT INTO projects (name, client, color, notes, billable, budget_type, budget_total, budget_priority)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+INSERT INTO projects (name, client, color, notes, billable, budget_type, budget_total, budget_priority, tags)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 RETURNING ` + projectSelectCols
 
 type CreateProjectParams struct {
@@ -193,6 +194,7 @@ type CreateProjectParams struct {
 	BudgetType     pgtype.Int2    `json:"budget_type"`
 	BudgetTotal    pgtype.Numeric `json:"budget_total"`
 	BudgetPriority pgtype.Int2    `json:"budget_priority"`
+	Tags           []string       `json:"tags"`
 }
 
 func (q *Queries) CreateProject(ctx context.Context, arg CreateProjectParams) (Project, error) {
@@ -205,6 +207,7 @@ func (q *Queries) CreateProject(ctx context.Context, arg CreateProjectParams) (P
 		arg.BudgetType,
 		arg.BudgetTotal,
 		arg.BudgetPriority,
+		arg.Tags,
 	)
 	return scanProject(row)
 }
@@ -769,6 +772,7 @@ SET name            = $2,
     budget_type     = $7,
     budget_total    = $8,
     budget_priority = $9,
+    tags            = $10,
     updated_at      = now()
 WHERE id = $1
 RETURNING ` + projectSelectCols
@@ -783,6 +787,7 @@ type UpdateProjectParams struct {
 	BudgetType     pgtype.Int2    `json:"budget_type"`
 	BudgetTotal    pgtype.Numeric `json:"budget_total"`
 	BudgetPriority pgtype.Int2    `json:"budget_priority"`
+	Tags           []string       `json:"tags"`
 }
 
 func (q *Queries) UpdateProject(ctx context.Context, arg UpdateProjectParams) (Project, error) {
@@ -796,6 +801,7 @@ func (q *Queries) UpdateProject(ctx context.Context, arg UpdateProjectParams) (P
 		arg.BudgetType,
 		arg.BudgetTotal,
 		arg.BudgetPriority,
+		arg.Tags,
 	)
 	return scanProject(row)
 }

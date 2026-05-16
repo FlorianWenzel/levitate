@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/florianwenzel/levitate/backend/internal/auth"
@@ -34,6 +35,7 @@ type projectDTO struct {
 	BudgetType     *int       `json:"budget_type"`
 	BudgetTotal    *float64   `json:"budget_total"`
 	BudgetPriority *int       `json:"budget_priority"`
+	Tags           []string   `json:"tags"`
 	ArchivedAt     *time.Time `json:"archived_at"`
 	CreatedAt      time.Time  `json:"created_at"`
 	UpdatedAt      time.Time  `json:"updated_at"`
@@ -59,6 +61,10 @@ func toProjectDTO(p db.Project) projectDTO {
 		v := numericFloat(p.BudgetTotal)
 		btot = &v
 	}
+	tags := p.Tags
+	if tags == nil {
+		tags = []string{}
+	}
 	return projectDTO{
 		ID:             uuidString(p.ID),
 		Name:           p.Name,
@@ -70,6 +76,7 @@ func toProjectDTO(p db.Project) projectDTO {
 		BudgetType:     bt,
 		BudgetTotal:    btot,
 		BudgetPriority: bp,
+		Tags:           tags,
 		ArchivedAt:     tsPtr(p.ArchivedAt),
 		CreatedAt:      ts(p.CreatedAt),
 		UpdatedAt:      ts(p.UpdatedAt),
@@ -85,6 +92,28 @@ type projectInput struct {
 	BudgetType     *int     `json:"budget_type"`
 	BudgetTotal    *float64 `json:"budget_total"`
 	BudgetPriority *int     `json:"budget_priority"`
+	Tags           []string `json:"tags"`
+}
+
+// normalizedTags trims whitespace, drops empty entries, and de-duplicates
+// (case-insensitively) while preserving the first occurrence's casing. Float's
+// own UI treats tags as case-insensitive labels.
+func (in projectInput) normalizedTags() []string {
+	out := make([]string, 0, len(in.Tags))
+	seen := map[string]struct{}{}
+	for _, t := range in.Tags {
+		t = strings.TrimSpace(t)
+		if t == "" {
+			continue
+		}
+		key := strings.ToLower(t)
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		out = append(out, t)
+	}
+	return out
 }
 
 func (in projectInput) validate() string {
@@ -198,6 +227,7 @@ func (h *projectsHandler) create(w http.ResponseWriter, r *http.Request) {
 		BudgetType:     bt,
 		BudgetTotal:    btot,
 		BudgetPriority: bp,
+		Tags:           in.normalizedTags(),
 	})
 	if err != nil {
 		WriteProblem(w, r, http.StatusInternalServerError, "create_failed", err.Error())
@@ -236,6 +266,7 @@ func (h *projectsHandler) update(w http.ResponseWriter, r *http.Request) {
 		BudgetType:     bt,
 		BudgetTotal:    btot,
 		BudgetPriority: bp,
+		Tags:           in.normalizedTags(),
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
