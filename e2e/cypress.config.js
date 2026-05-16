@@ -26,6 +26,9 @@ const floatMockData = {
       notes: 'Imported from mock Float',
       active: 1,
       non_billable: 0,
+      budget_type: 2,
+      budget_total: 25000,
+      budget_priority: 0,
     },
     {
       project_id: 302,
@@ -35,6 +38,9 @@ const floatMockData = {
       notes: 'Internal, non-billable work',
       active: 1,
       non_billable: 1,
+      budget_type: 1,
+      budget_total: 120,
+      budget_priority: 1,
     },
   ],
   '/tasks': [

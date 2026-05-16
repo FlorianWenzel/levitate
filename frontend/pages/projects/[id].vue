@@ -165,6 +165,19 @@ function phaseStatusLabel(s: 0 | 1 | 2): string {
   return s === 0 ? 'Draft' : s === 1 ? 'Tentative' : 'Confirmed'
 }
 
+function projectBudgetTypeLabel(t: Project['budget_type']): string {
+  return t === 1 ? 'Total hours' : t === 2 ? 'Total fee' : t === 3 ? 'Hourly fee' : '—'
+}
+
+function projectBudgetPriorityLabel(p: Project['budget_priority']): string {
+  return p === 0 ? 'Project-level' : p === 1 ? 'Phase-level' : p === 2 ? 'Task-level' : '—'
+}
+
+function projectBudgetTotalLabel(p: Project): string {
+  if (p.budget_total === null) return '—'
+  return p.budget_type === 1 ? `${p.budget_total} h` : `${p.budget_total}`
+}
+
 onMounted(load)
 </script>
 
@@ -185,6 +198,30 @@ onMounted(load)
       </div>
       <span class="inline-block h-6 w-6 rounded" :style="{ background: project.color }"></span>
     </header>
+
+    <section
+      v-if="project && project.budget_type !== null"
+      class="mt-6 rounded border border-slate-200 bg-white p-4"
+      data-cy="project-budget-summary"
+    >
+      <h2 class="text-sm font-semibold text-slate-900">Budget</h2>
+      <dl class="mt-2 grid grid-cols-3 gap-4 text-sm">
+        <div>
+          <dt class="text-xs uppercase tracking-wider text-slate-500">Type</dt>
+          <dd class="mt-0.5 text-slate-900" data-cy="project-detail-budget-type">{{ projectBudgetTypeLabel(project.budget_type) }}</dd>
+        </div>
+        <div>
+          <dt class="text-xs uppercase tracking-wider text-slate-500">Total</dt>
+          <dd class="mt-0.5 text-slate-900" data-cy="project-detail-budget-total">
+            {{ projectBudgetTotalLabel(project) }}
+          </dd>
+        </div>
+        <div>
+          <dt class="text-xs uppercase tracking-wider text-slate-500">Priority</dt>
+          <dd class="mt-0.5 text-slate-900" data-cy="project-detail-budget-priority">{{ projectBudgetPriorityLabel(project.budget_priority) }}</dd>
+        </div>
+      </dl>
+    </section>
 
     <section class="mt-8" data-cy="milestones-section">
       <div class="flex items-center justify-between">

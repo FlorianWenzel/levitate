@@ -80,13 +80,16 @@ type floatClient struct {
 }
 
 type floatProject struct {
-	ID          int    `json:"project_id"`
-	Name        string `json:"name"`
-	ClientID    int    `json:"client_id"`
-	Color       string `json:"color"`
-	Notes       string `json:"notes"`
-	Active      *int   `json:"active"`
-	NonBillable *int   `json:"non_billable"`
+	ID             int      `json:"project_id"`
+	Name           string   `json:"name"`
+	ClientID       int      `json:"client_id"`
+	Color          string   `json:"color"`
+	Notes          string   `json:"notes"`
+	Active         *int     `json:"active"`
+	NonBillable    *int     `json:"non_billable"`
+	BudgetType     *int     `json:"budget_type"`
+	BudgetTotal    *float64 `json:"budget_total"`
+	BudgetPriority *int     `json:"budget_priority"`
 }
 
 type floatTask struct {
@@ -445,13 +448,25 @@ func (h *floatImportHandler) importFloatData(ctx context.Context, people []float
 		if fp.NonBillable != nil && *fp.NonBillable == 1 {
 			billable = false
 		}
-		project, err := q.CreateProject(ctx, db.CreateProjectParams{
+		params := db.CreateProjectParams{
 			Name:     strings.TrimSpace(fp.Name),
 			Client:   client,
 			Color:    color,
 			Notes:    strings.TrimSpace(fp.Notes),
 			Billable: billable,
-		})
+		}
+		if fp.BudgetType != nil && *fp.BudgetType >= projectBudgetTypeMin && *fp.BudgetType <= projectBudgetTypeMax {
+			params.BudgetType = pgtype.Int2{Int16: int16(*fp.BudgetType), Valid: true}
+		}
+		if fp.BudgetPriority != nil && *fp.BudgetPriority >= projectBudgetPriorityMin && *fp.BudgetPriority <= projectBudgetPriorityMax {
+			params.BudgetPriority = pgtype.Int2{Int16: int16(*fp.BudgetPriority), Valid: true}
+		}
+		if fp.BudgetTotal != nil && *fp.BudgetTotal >= 0 {
+			if n, err := numericFromFloat(*fp.BudgetTotal); err == nil {
+				params.BudgetTotal = n
+			}
+		}
+		project, err := q.CreateProject(ctx, params)
 		if err != nil {
 			return result, err
 		}
