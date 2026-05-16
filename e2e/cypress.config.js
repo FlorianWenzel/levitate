@@ -114,6 +114,12 @@ const floatMockData = {
   ],
 }
 
+function floatMockLocalUrl() {
+  if (!floatMockServer) return null
+  const address = floatMockServer.address()
+  return `http://127.0.0.1:${address.port}`
+}
+
 function startFloatMock() {
   const publicHost = process.env.FLOAT_MOCK_HOST || 'host.docker.internal'
   if (floatMockServer) {
@@ -174,6 +180,7 @@ export default defineConfig({
           return null
         },
         startFloatMock,
+        floatMockLocalUrl,
       })
     },
     env: {

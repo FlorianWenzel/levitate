@@ -267,20 +267,27 @@ describe('User statuses (Home / Travel / Custom / Office)', () => {
   })
 
   it('serves the Float-parity /statuses payload from the mock API', () => {
-    cy.task('startFloatMock').then((baseUrl) => {
-      cy.apiRequest({
-        url: `${baseUrl}/statuses`,
-        headers: { Authorization: 'Bearer mock-float-token' },
-      }).then((res) => {
-        expect(res.status).to.eq(200)
-        expect(res.body).to.have.length(1)
-        expect(res.body[0]).to.include({
-          status_id: 1001,
-          status_type_id: 1,
-          people_id: 101,
-          start_date: '2026-06-02',
-          end_date: '2026-06-02',
-          repeat_state: 0,
+    // Other Float-mock tests pass the docker-resolvable URL to the backend
+    // container; this test hits the mock directly from Cypress, which runs on
+    // the host and cannot resolve host.docker.internal, so we ask the task
+    // layer for the loopback URL it bound to.
+    cy.task('startFloatMock').then(() => {
+      cy.task('floatMockLocalUrl').then((localUrl) => {
+        cy.request({
+          url: `${localUrl}/statuses`,
+          headers: { Authorization: 'Bearer mock-float-token' },
+          failOnStatusCode: false,
+        }).then((res) => {
+          expect(res.status).to.eq(200)
+          expect(res.body).to.have.length(1)
+          expect(res.body[0]).to.include({
+            status_id: 1001,
+            status_type_id: 1,
+            people_id: 101,
+            start_date: '2026-06-02',
+            end_date: '2026-06-02',
+            repeat_state: 0,
+          })
         })
       })
     })
