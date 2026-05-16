@@ -26,6 +26,7 @@ const floatMockData = {
       notes: 'Imported from mock Float',
       active: 1,
       non_billable: 0,
+      default_hourly_rate: 125.5,
     },
     {
       project_id: 302,
@@ -35,6 +36,7 @@ const floatMockData = {
       notes: 'Internal, non-billable work',
       active: 1,
       non_billable: 1,
+      default_hourly_rate: 0,
     },
   ],
   '/tasks': [

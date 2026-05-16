@@ -1,0 +1,113 @@
+You are implementing a feature for the levitate project. Read this entire prompt, then begin work.
+
+## Issue
+
+**#9 — API delete log for integration sync**
+
+Float exposes **Delete Log** endpoints so that integrations can detect deletions without full data re-syncs:
+
+- `GET /deleted/tasks` — returns deleted allocation (task) IDs with deletion timestamps  
+- `GET /deleted/timeoffs` — returns deleted time-off IDs with deletion timestamps  
+- `GET /deleted/logged-time` — returns deleted logged-time IDs with deletion timestamps  
+
+Each endpoint supports **cursor-based pagination** (`cursor` + `limit`, max 500) and returns:
+
+```json
+{
+  "data": [
+    { "id": 987654, "timestamp": "2026-01-09T10:30:00Z" }
+  ]
+}
+```
+
+Response headers include `X-Pagination-Next-Cursor` and `X-Pagination-Has-More`.
+
+Records are **retained for 72 hours** and delivery is at-least-once (the consumer deduplicates by ID).
+
+Sources:
+- Float changelog announcement: https://www.float.com/whats-new/changelog-april-24
+- Float API reference (Delete Log section): https://developer.float.com/api_reference.html#Delete_Log
+- Float Swagger paths (`paths/deleted.yaml`): https://developer.float.com/paths/deleted.yaml
+
+## What's missing in levitate
+
+Levitate has no mechanism for consumers (including the Float import sync) to discover which assignments, time-off entries, or logged-time entries have been deleted. The existing `audit_log` table tracks generic entity changes for human auditing, but it is not designed for integration-driven deletion reconciliation and is not exposed through a public API.
+
+During Float import, levitate currently only creates or updates records; it has no way to remove local assignments or time-off entries that were deleted in Float since the last sync.
+
+## Definition of done
+
+1. **New database table** `deleted_log` (or equivalent) with columns:
+   - `id` uuid PRIMARY KEY
+   - `entity_type` text NOT NULL (values: `assignment`, `time_off`, `logged_time`)
+   - `entity_id` uuid NOT NULL
+   - `deleted_at` timestamptz NOT NULL DEFAULT now()
+   - 72-hour retention enforced (e.g., via periodic cleanup or Postgres trigger)
+
+2. **Write on delete**: when an `assignment`, `time_off`, or `logged_time` row is deleted, a corresponding row is written to `deleted_log`.
+
+3. **Public API endpoints** (admin scope):
+   - `GET /api/deleted/assignments`
+   - `GET /api/deleted/time-off`
+   - `GET /api/deleted/logged-time`
+   - Query params: `cursor` (opaque), `limit` (integer, default 50, max 500)
+   - Response shape: `{ "data": [ { "id": "<uuid>", "timestamp": "<iso8601>" } ] }`
+   - Pagination headers: `X-Pagination-Next-Cursor`, `X-Pagination-Has-More`
+
+4. **Float import integration**: the Float import handler queries Float's `/deleted/*` endpoints during import and removes matching local records before creating/updating the remaining data.
+
+5. **Database migration** included in `backend/migrations/`.
+
+## Cypress coverage expectation
+
+An admin deletes an assignment via the UI and then sees that assignment's UUID returned by the `GET /api/deleted/assignments` endpoint.
+
+## Confidence note
+
+**High** — Float's public Swagger spec defines the exact endpoints, request parameters, response schemas, and pagination headers. The 72-hour retention and at-least-once semantics are explicitly documented. The mapping to levitate entity types (`tasks` → `assignments`, `timeoffs` → `time_off`) is straightforward.
+
+## Project Architecture
+
+- **Backend**: Go 1.25, chi router, sqlc over pgx/v5, golang-migrate, slog JSON. Source under `backend/`. Migrations in `backend/migrations/`. Handlers per domain in `backend/internal/api/<domain>.go`. DTOs in `backend/internal/api/dto.go` or inline. Router in `backend/internal/api/router.go`. sqlc queries in `backend/internal/db/queries.sql`.
+- **Frontend**: Nuxt 3 (SSR off — SPA), Pinia, Tailwind, oidc-client-ts. Source under `frontend/`. Pages in `frontend/pages/`, components in `frontend/components/`. API calls via `useApi()` composable (available globally). Stores in `frontend/stores/`. Types in `frontend/types/api.ts`.
+- **e2e**: Cypress, in `e2e/`. Config `e2e/cypress.config.js`, specs in `e2e/cypress/e2e/**/*.cy.ts`, support in `e2e/cypress/support/e2e.ts`.
+- **Tests**: After code changes, run the lightweight gate:
+  ```bash
+  cd /home/zora/levitate/backend
+  export PATH="/home/zora/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.3.linux-amd64/bin:$PATH"
+  go test ./... && go vet ./... && go build ./...
+  cd /home/zora/levitate/frontend
+  npm ci --no-audit --no-fund && npm run typecheck && npm run generate
+  ```
+  Docker is **not available** in this environment, so skip the full e2e run locally. Write the Cypress tests anyway; they will run in CI.
+  All local tests must pass before you commit.
+
+## Branch
+
+Commit all work to the branch `parity/issue-9`. Do not push — only commit locally. Make signed commits (SSH-signed; do not disable signing).
+
+## Hard Requirements
+
+- Implement the feature to satisfy the issue's definition of done.
+- **Write Cypress e2e tests** covering the behavior the issue names, placed under `e2e/cypress/e2e/**/*.cy.ts`.
+- Run the lightweight gate locally, and make it pass before finishing.
+- Do not weaken, skip, or delete existing tests to get green.
+- Do not modify CI configuration (`.github/workflows/*.yml`).
+- Keep commits signed (the repo uses SSH-signed commits; do not disable commit signing).
+- Commit the work to the branch with a clear message.
+- Do not push.
+- If you hit any blocker or the issue turns out to be too large to finish in one session, stop and report what you accomplished and what's left.
+
+## Reference Files
+
+- `backend/internal/api/float_import.go` — float import patterns.
+- `backend/internal/api/projects.go` — handler patterns.
+- `backend/internal/api/router.go` — wiring.
+- `backend/internal/db/queries.sql` — sqlc query patterns.
+- `frontend/pages/projects/index.vue` — project UI patterns.
+- `frontend/types/api.ts` — TypeScript types.
+- `e2e/cypress.config.js` — Float API mock server.
+- `e2e/cypress/e2e/20-float-import.cy.ts` — existing float import e2e patterns.
+- `backend/README.md` — additional project notes.
+
+Start by reading the repo structure and these files, then implement the feature. When done, report the final git status and confirm all tests passed.

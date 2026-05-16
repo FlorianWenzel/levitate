@@ -72,15 +72,16 @@ type Person struct {
 }
 
 type Project struct {
-	ID         pgtype.UUID        `json:"id"`
-	Name       string             `json:"name"`
-	Client     string             `json:"client"`
-	Color      string             `json:"color"`
-	Notes      string             `json:"notes"`
-	ArchivedAt pgtype.Timestamptz `json:"archived_at"`
-	CreatedAt  pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt  pgtype.Timestamptz `json:"updated_at"`
-	Billable   bool               `json:"billable"`
+	ID                pgtype.UUID        `json:"id"`
+	Name              string             `json:"name"`
+	Client            string             `json:"client"`
+	Color             string             `json:"color"`
+	Notes             string             `json:"notes"`
+	ArchivedAt        pgtype.Timestamptz `json:"archived_at"`
+	CreatedAt         pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt         pgtype.Timestamptz `json:"updated_at"`
+	Billable          bool               `json:"billable"`
+	DefaultHourlyRate pgtype.Numeric     `json:"default_hourly_rate"`
 }
 
 type TimeOff struct {

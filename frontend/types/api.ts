@@ -24,6 +24,7 @@ export type Project = {
   status: 'active' | 'archived'
   notes: string
   billable: boolean
+  default_hourly_rate: string
   archived_at: string | null
   created_at: string
   updated_at: string
@@ -35,6 +36,7 @@ export type ProjectInput = {
   color: string
   notes: string
   billable: boolean
+  default_hourly_rate?: string | number
 }
 
 export type Assignment = {

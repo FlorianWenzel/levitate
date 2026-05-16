@@ -55,6 +55,7 @@ describe('Float import', () => {
           status: 'active',
           notes: 'Imported from mock Float',
           billable: true,
+          default_hourly_rate: '125.500',
           archived_at: null,
           created_at: project.created_at,
           updated_at: project.updated_at,
@@ -62,6 +63,7 @@ describe('Float import', () => {
         const nonBillable = res.body.find((p: any) => p.name === 'Float Internal Tools')
         expect(nonBillable).to.exist
         expect(nonBillable.billable).to.eq(false)
+        expect(nonBillable.default_hourly_rate).to.eq('0.000')
       })
 
       cy.apiRequest({ url: '/api/assignments?from=2026-06-01&to=2026-06-07' }).then((res) => {
