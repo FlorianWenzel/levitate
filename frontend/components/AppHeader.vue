@@ -7,6 +7,7 @@ const route = useRoute()
 const links = computed(() => [
   { to: '/', label: 'Dashboard' },
   { to: '/people', label: 'People' },
+  { to: '/roles', label: 'Roles' },
   { to: '/projects', label: 'Projects' },
   { to: '/schedule', label: 'Schedule' },
   { to: '/capacity', label: 'Capacity' },

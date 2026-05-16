@@ -375,3 +375,38 @@ SELECT * FROM user_statuses WHERE float_id = $1;
 
 -- name: DeleteUserStatusesByFloatID :exec
 DELETE FROM user_statuses WHERE float_id = ANY(sqlc.arg(float_ids)::bigint[]);
+
+-- ===== roles =====
+
+-- name: ListRoles :many
+SELECT * FROM roles
+ORDER BY name ASC, id ASC;
+
+-- name: GetRole :one
+SELECT * FROM roles WHERE id = $1;
+
+-- name: GetRoleByName :one
+SELECT * FROM roles WHERE lower(name) = lower($1);
+
+-- name: CreateRole :one
+INSERT INTO roles (name, default_hourly_rate, cost_rate_history)
+VALUES ($1, $2, $3)
+RETURNING *;
+
+-- name: UpdateRole :one
+UPDATE roles
+SET name                = $2,
+    default_hourly_rate = $3,
+    cost_rate_history   = $4,
+    updated_at          = now()
+WHERE id = $1
+RETURNING *;
+
+-- name: DeleteRole :exec
+DELETE FROM roles WHERE id = $1;
+
+-- name: SetRoleFloatID :exec
+UPDATE roles SET float_id = $2 WHERE id = $1;
+
+-- name: GetRoleByFloatID :one
+SELECT * FROM roles WHERE float_id = $1;

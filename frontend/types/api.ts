@@ -188,3 +188,28 @@ export type PhaseInput = {
   non_billable?: boolean
   status?: 0 | 1 | 2
 }
+
+// Role mirrors Float's Roles entity: a reusable job role with an associated
+// hourly bill rate (`default_hourly_rate`, kept as a string to preserve
+// Float's "260.000" format) and a historical cost-rate trail.
+export type RoleCostRateEntry = {
+  rate: string
+  effective_date: string
+}
+
+export type Role = {
+  id: string
+  name: string
+  default_hourly_rate: string
+  cost_rate_history: RoleCostRateEntry[]
+  people_ids: string[]
+  people_count: number
+  created_at: string
+  updated_at: string
+}
+
+export type RoleInput = {
+  name: string
+  default_hourly_rate?: string | number
+  cost_rate_history?: RoleCostRateEntry[]
+}
