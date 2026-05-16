@@ -12,17 +12,21 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
+// projectDTO mirrors Float's Project response. `default_hourly_rate` is emitted
+// as a string (e.g. "75.500") to match Float's wire format, which lets a
+// Float→levitate→Float round trip preserve the value byte-for-byte.
 type projectDTO struct {
-	ID         string     `json:"id"`
-	Name       string     `json:"name"`
-	Client     string     `json:"client"`
-	Color      string     `json:"color"`
-	Notes      string     `json:"notes"`
-	Billable   bool       `json:"billable"`
-	Status     string     `json:"status"`
-	ArchivedAt *time.Time `json:"archived_at"`
-	CreatedAt  time.Time  `json:"created_at"`
-	UpdatedAt  time.Time  `json:"updated_at"`
+	ID                string     `json:"id"`
+	Name              string     `json:"name"`
+	Client            string     `json:"client"`
+	Color             string     `json:"color"`
+	Notes             string     `json:"notes"`
+	Billable          bool       `json:"billable"`
+	DefaultHourlyRate string     `json:"default_hourly_rate"`
+	Status            string     `json:"status"`
+	ArchivedAt        *time.Time `json:"archived_at"`
+	CreatedAt         time.Time  `json:"created_at"`
+	UpdatedAt         time.Time  `json:"updated_at"`
 }
 
 func toProjectDTO(p db.Project) projectDTO {
@@ -31,25 +35,29 @@ func toProjectDTO(p db.Project) projectDTO {
 		status = "archived"
 	}
 	return projectDTO{
-		ID:         uuidString(p.ID),
-		Name:       p.Name,
-		Client:     p.Client,
-		Color:      p.Color,
-		Notes:      p.Notes,
-		Billable:   p.Billable,
-		Status:     status,
-		ArchivedAt: tsPtr(p.ArchivedAt),
-		CreatedAt:  ts(p.CreatedAt),
-		UpdatedAt:  ts(p.UpdatedAt),
+		ID:                uuidString(p.ID),
+		Name:              p.Name,
+		Client:            p.Client,
+		Color:             p.Color,
+		Notes:             p.Notes,
+		Billable:          p.Billable,
+		DefaultHourlyRate: formatRateString(p.DefaultHourlyRate),
+		Status:            status,
+		ArchivedAt:        tsPtr(p.ArchivedAt),
+		CreatedAt:         ts(p.CreatedAt),
+		UpdatedAt:         ts(p.UpdatedAt),
 	}
 }
 
+// projectInput accepts both numeric and string `default_hourly_rate` (Float's
+// native form is the string "75.500") via parseRateInput, mirroring Roles.
 type projectInput struct {
-	Name     string `json:"name"`
-	Client   string `json:"client"`
-	Color    string `json:"color"`
-	Notes    string `json:"notes"`
-	Billable *bool  `json:"billable"`
+	Name              string           `json:"name"`
+	Client            string           `json:"client"`
+	Color             string           `json:"color"`
+	Notes             string           `json:"notes"`
+	Billable          *bool            `json:"billable"`
+	DefaultHourlyRate *json.RawMessage `json:"default_hourly_rate"`
 }
 
 func (in projectInput) validate() string {
@@ -72,6 +80,7 @@ func (h *projectsHandler) routes(r chi.Router) {
 		r.Use(auth.RequireRole(auth.RoleAdmin))
 		r.Post("/", h.create)
 		r.Patch("/{id}", h.update)
+		r.Put("/{id}", h.update)
 		r.Post("/{id}/archive", h.archive)
 		r.Post("/{id}/unarchive", h.unarchive)
 	})
@@ -126,12 +135,18 @@ func (h *projectsHandler) create(w http.ResponseWriter, r *http.Request) {
 	if in.Billable != nil {
 		billable = *in.Billable
 	}
+	rate, err := parseRateInput(in.DefaultHourlyRate)
+	if err != nil {
+		WriteProblem(w, r, http.StatusUnprocessableEntity, "validation", err.Error())
+		return
+	}
 	p, err := h.q.CreateProject(r.Context(), db.CreateProjectParams{
-		Name:     in.Name,
-		Client:   in.Client,
-		Color:    in.Color,
-		Notes:    in.Notes,
-		Billable: billable,
+		Name:              in.Name,
+		Client:            in.Client,
+		Color:             in.Color,
+		Notes:             in.Notes,
+		Billable:          billable,
+		DefaultHourlyRate: rate,
 	})
 	if err != nil {
 		WriteProblem(w, r, http.StatusInternalServerError, "create_failed", err.Error())
@@ -144,6 +159,15 @@ func (h *projectsHandler) update(w http.ResponseWriter, r *http.Request) {
 	id, err := pgUUID(chi.URLParam(r, "id"))
 	if err != nil {
 		WriteProblem(w, r, http.StatusBadRequest, "bad_id", err.Error())
+		return
+	}
+	existing, err := h.q.GetProject(r.Context(), id)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			WriteProblem(w, r, http.StatusNotFound, "not_found", "project not found")
+			return
+		}
+		WriteProblem(w, r, http.StatusInternalServerError, "get_failed", err.Error())
 		return
 	}
 	var in projectInput
@@ -159,13 +183,23 @@ func (h *projectsHandler) update(w http.ResponseWriter, r *http.Request) {
 	if in.Billable != nil {
 		billable = *in.Billable
 	}
+	rate := existing.DefaultHourlyRate
+	if in.DefaultHourlyRate != nil {
+		parsed, err := parseRateInput(in.DefaultHourlyRate)
+		if err != nil {
+			WriteProblem(w, r, http.StatusUnprocessableEntity, "validation", err.Error())
+			return
+		}
+		rate = parsed
+	}
 	p, err := h.q.UpdateProject(r.Context(), db.UpdateProjectParams{
-		ID:       id,
-		Name:     in.Name,
-		Client:   in.Client,
-		Color:    in.Color,
-		Notes:    in.Notes,
-		Billable: billable,
+		ID:                id,
+		Name:              in.Name,
+		Client:            in.Client,
+		Color:             in.Color,
+		Notes:             in.Notes,
+		Billable:          billable,
+		DefaultHourlyRate: rate,
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {

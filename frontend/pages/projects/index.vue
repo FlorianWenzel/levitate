@@ -15,7 +15,7 @@ const editing = ref<Project | null>(null)
 const form = ref<ProjectInput>(emptyForm())
 
 function emptyForm(): ProjectInput {
-  return { name: '', client: '', color: '#0EA5E9', notes: '', billable: true }
+  return { name: '', client: '', color: '#0EA5E9', notes: '', billable: true, default_hourly_rate: '' }
 }
 
 async function load() {
@@ -39,7 +39,14 @@ function openCreate() {
 
 function openEdit(p: Project) {
   editing.value = p
-  form.value = { name: p.name, client: p.client, color: p.color, notes: p.notes, billable: p.billable }
+  form.value = {
+    name: p.name,
+    client: p.client,
+    color: p.color,
+    notes: p.notes,
+    billable: p.billable,
+    default_hourly_rate: p.default_hourly_rate,
+  }
   showForm.value = true
 }
 
@@ -189,6 +196,17 @@ onMounted(load)
               <input v-model="form.billable" type="checkbox" data-cy="billable-toggle" class="rounded">
               Billable
             </label>
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-slate-600">Default hourly rate</label>
+            <input
+              v-model="form.default_hourly_rate"
+              type="text"
+              inputmode="decimal"
+              placeholder="e.g. 75.50"
+              data-cy="project-rate-input"
+              class="mt-1 w-full rounded border border-slate-300 px-2 py-1.5"
+            >
           </div>
           <div class="flex justify-end gap-2 pt-2">
             <button type="button" class="rounded px-3 py-1.5 text-slate-600 hover:bg-slate-100" @click="showForm = false">Cancel</button>
