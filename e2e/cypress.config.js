@@ -100,6 +100,24 @@ const floatMockData = {
       notes: 'Mock logged time',
     },
   ],
+  '/statuses': [
+    {
+      status_id: 1001,
+      status_type_id: 1,
+      people_id: 101,
+      status_name: '',
+      start_date: '2026-06-02',
+      end_date: '2026-06-02',
+      repeat_state: 0,
+      repeat_end_date: '',
+    },
+  ],
+}
+
+function floatMockLocalUrl() {
+  if (!floatMockServer) return null
+  const address = floatMockServer.address()
+  return `http://127.0.0.1:${address.port}`
 }
 
 function startFloatMock() {
@@ -162,6 +180,7 @@ export default defineConfig({
           return null
         },
         startFloatMock,
+        floatMockLocalUrl,
       })
     },
     env: {

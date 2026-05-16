@@ -70,6 +70,7 @@ func NewRouter(d Deps) http.Handler {
 	phases := newPhasesHandler(q)
 	deleted := newDeletedHandler(q)
 	loggedTime := newLoggedTimeHandler(q)
+	statuses := newStatusesHandler(q)
 
 	r.Route("/api", func(r chi.Router) {
 		r.Use(d.Verifier.Middleware)
@@ -84,6 +85,7 @@ func NewRouter(d Deps) http.Handler {
 		r.Route("/assignments", assignments.routes)
 		r.Route("/time-off", timeOff.routes)
 		r.Route("/logged-time", loggedTime.routes)
+		r.Route("/statuses", statuses.routes)
 		r.Get("/reports/utilization", reports.utilizationJSON)
 		r.Get("/reports/utilization.csv", reports.utilizationCSV)
 		r.Get("/reports/assignments.csv", reports.assignmentsCSV)

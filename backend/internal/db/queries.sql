@@ -331,3 +331,47 @@ UPDATE assignments SET float_id = $2 WHERE id = $1;
 
 -- name: SetTimeOffFloatID :exec
 UPDATE time_off SET float_id = $2 WHERE id = $1;
+
+-- ===== user_statuses =====
+
+-- name: ListUserStatuses :many
+SELECT * FROM user_statuses
+WHERE
+    (sqlc.narg(person_id)::uuid IS NULL OR person_id = sqlc.narg(person_id)::uuid)
+    AND (sqlc.narg(status_type_id)::smallint IS NULL OR status_type_id = sqlc.narg(status_type_id)::smallint)
+    AND (sqlc.narg(date_from)::date IS NULL OR end_date >= sqlc.narg(date_from)::date)
+    AND (sqlc.narg(date_to)::date IS NULL OR start_date <= sqlc.narg(date_to)::date)
+ORDER BY start_date ASC, id ASC;
+
+-- name: GetUserStatus :one
+SELECT * FROM user_statuses WHERE id = $1;
+
+-- name: CreateUserStatus :one
+INSERT INTO user_statuses (person_id, status_type_id, status_name, start_date, end_date, repeat_state, repeat_end_date)
+VALUES ($1, $2, $3, $4, $5, $6, $7)
+RETURNING *;
+
+-- name: UpdateUserStatus :one
+UPDATE user_statuses
+SET person_id       = $2,
+    status_type_id  = $3,
+    status_name     = $4,
+    start_date      = $5,
+    end_date        = $6,
+    repeat_state    = $7,
+    repeat_end_date = $8,
+    updated_at      = now()
+WHERE id = $1
+RETURNING *;
+
+-- name: DeleteUserStatus :exec
+DELETE FROM user_statuses WHERE id = $1;
+
+-- name: SetUserStatusFloatID :exec
+UPDATE user_statuses SET float_id = $2 WHERE id = $1;
+
+-- name: GetUserStatusByFloatID :one
+SELECT * FROM user_statuses WHERE float_id = $1;
+
+-- name: DeleteUserStatusesByFloatID :exec
+DELETE FROM user_statuses WHERE float_id = ANY(sqlc.arg(float_ids)::bigint[]);
