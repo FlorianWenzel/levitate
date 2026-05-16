@@ -14,15 +14,17 @@ import (
 )
 
 type loggedTimeDTO struct {
-	ID        string    `json:"id"`
-	PersonID  string    `json:"person_id"`
-	Date      string    `json:"date"`
-	Hours     float64   `json:"hours"`
-	Billable  bool      `json:"billable"`
-	Notes     string    `json:"notes"`
-	ProjectID *string   `json:"project_id"`
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
+	ID         string     `json:"id"`
+	PersonID   string     `json:"person_id"`
+	Date       string     `json:"date"`
+	Hours      float64    `json:"hours"`
+	Billable   bool       `json:"billable"`
+	Notes      string     `json:"notes"`
+	ProjectID  *string    `json:"project_id"`
+	Locked     bool       `json:"locked"`
+	LockedDate *time.Time `json:"locked_date"`
+	CreatedAt  time.Time  `json:"created_at"`
+	UpdatedAt  time.Time  `json:"updated_at"`
 }
 
 func toLoggedTimeDTO(l db.LoggedTime) loggedTimeDTO {
@@ -32,18 +34,24 @@ func toLoggedTimeDTO(l db.LoggedTime) loggedTimeDTO {
 		projectID = &s
 	}
 	return loggedTimeDTO{
-		ID:        uuidString(l.ID),
-		PersonID:  uuidString(l.PersonID),
-		Date:      formatDate(l.Date),
-		Hours:     numericFloat(l.Hours),
-		Billable:  l.Billable,
-		Notes:     l.Notes,
-		ProjectID: projectID,
-		CreatedAt: ts(l.CreatedAt),
-		UpdatedAt: ts(l.UpdatedAt),
+		ID:         uuidString(l.ID),
+		PersonID:   uuidString(l.PersonID),
+		Date:       formatDate(l.Date),
+		Hours:      numericFloat(l.Hours),
+		Billable:   l.Billable,
+		Notes:      l.Notes,
+		ProjectID:  projectID,
+		Locked:     l.Locked,
+		LockedDate: tsPtr(l.LockedDate),
+		CreatedAt:  ts(l.CreatedAt),
+		UpdatedAt:  ts(l.UpdatedAt),
 	}
 }
 
+// loggedTimeInput is the POST body for /api/logged-time. `locked` /
+// `locked_date` are intentionally absent: Float treats them as read-only
+// projections of project/phase/task lock settings, so we accept lock
+// transitions only via the dedicated /lock and /unlock admin endpoints.
 type loggedTimeInput struct {
 	PersonID  string  `json:"person_id"`
 	Date      string  `json:"date"`
@@ -71,7 +79,8 @@ func (in loggedTimeInput) validate() string {
 // loggedTimePatch is the PATCH body for /api/logged-time/{id}; every field is
 // optional so callers can update a subset (e.g. hours + notes only). billable
 // is intentionally absent: it's derived from the referenced project at write
-// time, matching Float's contract.
+// time, matching Float's contract. locked / locked_date are likewise omitted
+// — flip them via the /lock and /unlock admin endpoints, not via PATCH.
 type loggedTimePatch struct {
 	Date      *string  `json:"date"`
 	Hours     *float64 `json:"hours"`
@@ -93,6 +102,8 @@ func (h *loggedTimeHandler) routes(r chi.Router) {
 		r.Post("/", h.create)
 		r.Patch("/{id}", h.update)
 		r.Delete("/{id}", h.del)
+		r.Post("/{id}/lock", h.lock)
+		r.Post("/{id}/unlock", h.unlock)
 	})
 }
 
@@ -217,6 +228,12 @@ func (h *loggedTimeHandler) update(w http.ResponseWriter, r *http.Request) {
 		WriteProblem(w, r, http.StatusInternalServerError, "get_failed", err.Error())
 		return
 	}
+	// Float treats a locked entry as immutable; reject edits with 409 to give
+	// callers an unambiguous signal (vs. silently dropping changes).
+	if existing.Locked {
+		WriteProblem(w, r, http.StatusConflict, "locked", "logged-time entry is locked")
+		return
+	}
 
 	date := existing.Date
 	if patch.Date != nil {
@@ -283,6 +300,46 @@ func (h *loggedTimeHandler) del(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// lock flips the entry's locked flag to true and stamps locked_date with the
+// current timestamp. Mirrors Float's locking contract where lock state is set
+// by the system (project/phase/task settings) and is not modifiable through
+// the regular /logged-time payload.
+func (h *loggedTimeHandler) lock(w http.ResponseWriter, r *http.Request) {
+	id, err := pgUUID(chi.URLParam(r, "id"))
+	if err != nil {
+		WriteProblem(w, r, http.StatusBadRequest, "bad_id", err.Error())
+		return
+	}
+	l, err := h.q.LockLoggedTime(r.Context(), id)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			WriteProblem(w, r, http.StatusNotFound, "not_found", "logged-time not found")
+			return
+		}
+		WriteProblem(w, r, http.StatusInternalServerError, "lock_failed", err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, toLoggedTimeDTO(l))
+}
+
+func (h *loggedTimeHandler) unlock(w http.ResponseWriter, r *http.Request) {
+	id, err := pgUUID(chi.URLParam(r, "id"))
+	if err != nil {
+		WriteProblem(w, r, http.StatusBadRequest, "bad_id", err.Error())
+		return
+	}
+	l, err := h.q.UnlockLoggedTime(r.Context(), id)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			WriteProblem(w, r, http.StatusNotFound, "not_found", "logged-time not found")
+			return
+		}
+		WriteProblem(w, r, http.StatusInternalServerError, "unlock_failed", err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, toLoggedTimeDTO(l))
 }
 
 // resolveProjectBillable looks up the referenced project (if any) and derives

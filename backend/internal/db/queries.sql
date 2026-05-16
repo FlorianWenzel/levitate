@@ -294,6 +294,22 @@ UPDATE logged_time SET float_id = $2 WHERE id = $1;
 -- name: GetLoggedTimeByFloatID :one
 SELECT * FROM logged_time WHERE float_id = $1;
 
+-- name: LockLoggedTime :one
+UPDATE logged_time
+SET locked      = true,
+    locked_date = COALESCE(locked_date, now()),
+    updated_at  = now()
+WHERE id = $1
+RETURNING *;
+
+-- name: UnlockLoggedTime :one
+UPDATE logged_time
+SET locked      = false,
+    locked_date = NULL,
+    updated_at  = now()
+WHERE id = $1
+RETURNING *;
+
 -- ===== deleted_log =====
 
 -- name: InsertDeletedLog :one

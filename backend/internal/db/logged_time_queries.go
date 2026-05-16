@@ -14,20 +14,45 @@ import (
 )
 
 type LoggedTime struct {
-	ID        pgtype.UUID        `json:"id"`
-	PersonID  pgtype.UUID        `json:"person_id"`
-	Date      pgtype.Date        `json:"date"`
-	Hours     pgtype.Numeric     `json:"hours"`
-	Billable  bool               `json:"billable"`
-	Notes     string             `json:"notes"`
-	ProjectID pgtype.UUID        `json:"project_id"`
-	FloatID   pgtype.Int8        `json:"float_id"`
-	CreatedAt pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
+	ID         pgtype.UUID        `json:"id"`
+	PersonID   pgtype.UUID        `json:"person_id"`
+	Date       pgtype.Date        `json:"date"`
+	Hours      pgtype.Numeric     `json:"hours"`
+	Billable   bool               `json:"billable"`
+	Notes      string             `json:"notes"`
+	ProjectID  pgtype.UUID        `json:"project_id"`
+	FloatID    pgtype.Int8        `json:"float_id"`
+	Locked     bool               `json:"locked"`
+	LockedDate pgtype.Timestamptz `json:"locked_date"`
+	CreatedAt  pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt  pgtype.Timestamptz `json:"updated_at"`
+}
+
+const loggedTimeSelectCols = `id, person_id, date, hours, billable, notes, project_id, float_id, locked, locked_date, created_at, updated_at`
+
+func scanLoggedTime(scanner interface {
+	Scan(dest ...any) error
+}) (LoggedTime, error) {
+	var i LoggedTime
+	err := scanner.Scan(
+		&i.ID,
+		&i.PersonID,
+		&i.Date,
+		&i.Hours,
+		&i.Billable,
+		&i.Notes,
+		&i.ProjectID,
+		&i.FloatID,
+		&i.Locked,
+		&i.LockedDate,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
 }
 
 const listLoggedTime = `-- name: ListLoggedTime :many
-SELECT id, person_id, date, hours, billable, notes, project_id, float_id, created_at, updated_at
+SELECT ` + loggedTimeSelectCols + `
 FROM logged_time
 WHERE
     ($1::uuid IS NULL OR person_id = $1::uuid)
@@ -52,19 +77,8 @@ func (q *Queries) ListLoggedTime(ctx context.Context, arg ListLoggedTimeParams) 
 	defer rows.Close()
 	var items []LoggedTime
 	for rows.Next() {
-		var i LoggedTime
-		if err := rows.Scan(
-			&i.ID,
-			&i.PersonID,
-			&i.Date,
-			&i.Hours,
-			&i.Billable,
-			&i.Notes,
-			&i.ProjectID,
-			&i.FloatID,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-		); err != nil {
+		i, err := scanLoggedTime(rows)
+		if err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -76,32 +90,19 @@ func (q *Queries) ListLoggedTime(ctx context.Context, arg ListLoggedTimeParams) 
 }
 
 const getLoggedTime = `-- name: GetLoggedTime :one
-SELECT id, person_id, date, hours, billable, notes, project_id, float_id, created_at, updated_at
+SELECT ` + loggedTimeSelectCols + `
 FROM logged_time WHERE id = $1
 `
 
 func (q *Queries) GetLoggedTime(ctx context.Context, id pgtype.UUID) (LoggedTime, error) {
 	row := q.db.QueryRow(ctx, getLoggedTime, id)
-	var i LoggedTime
-	err := row.Scan(
-		&i.ID,
-		&i.PersonID,
-		&i.Date,
-		&i.Hours,
-		&i.Billable,
-		&i.Notes,
-		&i.ProjectID,
-		&i.FloatID,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-	)
-	return i, err
+	return scanLoggedTime(row)
 }
 
 const createLoggedTime = `-- name: CreateLoggedTime :one
 INSERT INTO logged_time (person_id, date, hours, billable, notes, project_id)
 VALUES ($1, $2, $3, $4, $5, $6)
-RETURNING id, person_id, date, hours, billable, notes, project_id, float_id, created_at, updated_at
+RETURNING ` + loggedTimeSelectCols + `
 `
 
 type CreateLoggedTimeParams struct {
@@ -122,20 +123,7 @@ func (q *Queries) CreateLoggedTime(ctx context.Context, arg CreateLoggedTimePara
 		arg.Notes,
 		arg.ProjectID,
 	)
-	var i LoggedTime
-	err := row.Scan(
-		&i.ID,
-		&i.PersonID,
-		&i.Date,
-		&i.Hours,
-		&i.Billable,
-		&i.Notes,
-		&i.ProjectID,
-		&i.FloatID,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-	)
-	return i, err
+	return scanLoggedTime(row)
 }
 
 const updateLoggedTime = `-- name: UpdateLoggedTime :one
@@ -147,7 +135,7 @@ SET date       = $2,
     project_id = $6,
     updated_at = now()
 WHERE id = $1
-RETURNING id, person_id, date, hours, billable, notes, project_id, float_id, created_at, updated_at
+RETURNING ` + loggedTimeSelectCols + `
 `
 
 type UpdateLoggedTimeParams struct {
@@ -168,20 +156,7 @@ func (q *Queries) UpdateLoggedTime(ctx context.Context, arg UpdateLoggedTimePara
 		arg.Notes,
 		arg.ProjectID,
 	)
-	var i LoggedTime
-	err := row.Scan(
-		&i.ID,
-		&i.PersonID,
-		&i.Date,
-		&i.Hours,
-		&i.Billable,
-		&i.Notes,
-		&i.ProjectID,
-		&i.FloatID,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-	)
-	return i, err
+	return scanLoggedTime(row)
 }
 
 const deleteLoggedTime = `-- name: DeleteLoggedTime :exec
@@ -212,24 +187,44 @@ func (q *Queries) SetLoggedTimeFloatID(ctx context.Context, id pgtype.UUID, floa
 }
 
 const getLoggedTimeByFloatID = `-- name: GetLoggedTimeByFloatID :one
-SELECT id, person_id, date, hours, billable, notes, project_id, float_id, created_at, updated_at
+SELECT ` + loggedTimeSelectCols + `
 FROM logged_time WHERE float_id = $1
 `
 
 func (q *Queries) GetLoggedTimeByFloatID(ctx context.Context, floatID pgtype.Int8) (LoggedTime, error) {
 	row := q.db.QueryRow(ctx, getLoggedTimeByFloatID, floatID)
-	var i LoggedTime
-	err := row.Scan(
-		&i.ID,
-		&i.PersonID,
-		&i.Date,
-		&i.Hours,
-		&i.Billable,
-		&i.Notes,
-		&i.ProjectID,
-		&i.FloatID,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-	)
-	return i, err
+	return scanLoggedTime(row)
+}
+
+// LockLoggedTime flips an entry to locked=true and stamps locked_date with the
+// current timestamp (idempotent: re-locking does not refresh locked_date once
+// set, mirroring Float's "set automatically when locked transitions to true"
+// contract).
+const lockLoggedTime = `-- name: LockLoggedTime :one
+UPDATE logged_time
+SET locked      = true,
+    locked_date = COALESCE(locked_date, now()),
+    updated_at  = now()
+WHERE id = $1
+RETURNING ` + loggedTimeSelectCols + `
+`
+
+func (q *Queries) LockLoggedTime(ctx context.Context, id pgtype.UUID) (LoggedTime, error) {
+	row := q.db.QueryRow(ctx, lockLoggedTime, id)
+	return scanLoggedTime(row)
+}
+
+// UnlockLoggedTime flips an entry back to locked=false and clears locked_date.
+const unlockLoggedTime = `-- name: UnlockLoggedTime :one
+UPDATE logged_time
+SET locked      = false,
+    locked_date = NULL,
+    updated_at  = now()
+WHERE id = $1
+RETURNING ` + loggedTimeSelectCols + `
+`
+
+func (q *Queries) UnlockLoggedTime(ctx context.Context, id pgtype.UUID) (LoggedTime, error) {
+	row := q.db.QueryRow(ctx, unlockLoggedTime, id)
+	return scanLoggedTime(row)
 }

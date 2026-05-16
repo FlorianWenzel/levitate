@@ -147,13 +147,15 @@ type floatMilestone struct {
 }
 
 type floatLoggedTime struct {
-	ID        int64   `json:"logged_time_id"`
-	PersonID  int     `json:"people_id"`
-	ProjectID int     `json:"project_id"`
-	Date      string  `json:"date"`
-	Hours     float64 `json:"hours"`
-	Billable  *int    `json:"billable"`
-	Notes     string  `json:"notes"`
+	ID         int64   `json:"logged_time_id"`
+	PersonID   int     `json:"people_id"`
+	ProjectID  int     `json:"project_id"`
+	Date       string  `json:"date"`
+	Hours      float64 `json:"hours"`
+	Billable   *int    `json:"billable"`
+	Notes      string  `json:"notes"`
+	Locked     *int    `json:"locked"`
+	LockedDate string  `json:"locked_date"`
 }
 
 // floatDeletedEntry models Float's /deleted/<entity> response rows.
@@ -796,20 +798,39 @@ func (h *floatImportHandler) importFloatData(ctx context.Context, people []float
 		}
 		notes := strings.TrimSpace(fl.Notes)
 
+		locked := fl.Locked != nil && *fl.Locked == 1
+
 		// Upsert by Float ID: if we've already imported this row, update in
 		// place so a re-sync picks up edits made in Float.
 		if fl.ID != 0 {
 			existing, err := q.GetLoggedTimeByFloatID(ctx, pgtype.Int8{Int64: fl.ID, Valid: true})
 			if err == nil {
-				if _, err := q.UpdateLoggedTime(ctx, db.UpdateLoggedTimeParams{
-					ID:        existing.ID,
-					Date:      date,
-					Hours:     hours,
-					Billable:  billable,
-					Notes:     notes,
-					ProjectID: projectID,
-				}); err != nil {
-					return result, err
+				// Float's locked flag may change between syncs (an entry can
+				// be locked once a project's timesheet window closes, and
+				// re-opened). Reflect both transitions locally.
+				if !existing.Locked && locked {
+					if _, err := q.LockLoggedTime(ctx, existing.ID); err != nil {
+						return result, err
+					}
+				} else if existing.Locked && !locked {
+					if _, err := q.UnlockLoggedTime(ctx, existing.ID); err != nil {
+						return result, err
+					}
+				}
+				if !locked {
+					// Locked entries are immutable on our side too; skip the
+					// content update to avoid clobbering an already-locked
+					// snapshot.
+					if _, err := q.UpdateLoggedTime(ctx, db.UpdateLoggedTimeParams{
+						ID:        existing.ID,
+						Date:      date,
+						Hours:     hours,
+						Billable:  billable,
+						Notes:     notes,
+						ProjectID: projectID,
+					}); err != nil {
+						return result, err
+					}
 				}
 				result.LoggedTimeSkipped++
 				continue
@@ -831,6 +852,11 @@ func (h *floatImportHandler) importFloatData(ctx context.Context, people []float
 		}
 		if fl.ID != 0 {
 			if err := q.SetLoggedTimeFloatID(ctx, created.ID, fl.ID); err != nil {
+				return result, err
+			}
+		}
+		if locked {
+			if _, err := q.LockLoggedTime(ctx, created.ID); err != nil {
 				return result, err
 			}
 		}
