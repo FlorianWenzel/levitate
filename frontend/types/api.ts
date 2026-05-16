@@ -137,6 +137,13 @@ export type LoggedTime = {
   hours: number
   billable: boolean
   notes: string
+  // `locked` and `locked_date` mirror Float's LoggedTime schema
+  // (https://developer.float.com/reference/logged-time): locked is a
+  // server-managed read-only flag (set when project/phase/task lock
+  // settings close the timesheet window), and locked_date records when
+  // the lock was applied.
+  locked: boolean
+  locked_date: string | null
   created_at: string
   updated_at: string
 }
