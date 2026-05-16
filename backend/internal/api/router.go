@@ -71,6 +71,7 @@ func NewRouter(d Deps) http.Handler {
 	deleted := newDeletedHandler(q)
 	loggedTime := newLoggedTimeHandler(q)
 	statuses := newStatusesHandler(q)
+	roles := newRolesHandler(q)
 
 	r.Route("/api", func(r chi.Router) {
 		r.Use(d.Verifier.Middleware)
@@ -86,6 +87,7 @@ func NewRouter(d Deps) http.Handler {
 		r.Route("/time-off", timeOff.routes)
 		r.Route("/logged-time", loggedTime.routes)
 		r.Route("/statuses", statuses.routes)
+		r.Route("/roles", roles.routes)
 		r.Get("/reports/utilization", reports.utilizationJSON)
 		r.Get("/reports/utilization.csv", reports.utilizationCSV)
 		r.Get("/reports/assignments.csv", reports.assignmentsCSV)

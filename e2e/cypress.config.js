@@ -112,6 +112,18 @@ const floatMockData = {
       repeat_end_date: '',
     },
   ],
+  '/roles': [
+    {
+      id: 1101,
+      name: 'Senior Designer',
+      default_hourly_rate: '260.000',
+      cost_rate_history: [
+        { rate: '180.000', effective_date: '2026-01-01' },
+      ],
+      people_ids: [101],
+      people_count: 1,
+    },
+  ],
 }
 
 function floatMockLocalUrl() {
