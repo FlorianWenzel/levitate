@@ -35,28 +35,38 @@ func (q *Queries) ArchivePerson(ctx context.Context, id pgtype.UUID) (Person, er
 	return i, err
 }
 
+const projectSelectCols = `id, name, client, color, notes, archived_at, created_at, updated_at, billable, budget_type, budget_total, budget_priority`
+
+func scanProject(scanner interface {
+	Scan(dest ...any) error
+}) (Project, error) {
+	var p Project
+	err := scanner.Scan(
+		&p.ID,
+		&p.Name,
+		&p.Client,
+		&p.Color,
+		&p.Notes,
+		&p.ArchivedAt,
+		&p.CreatedAt,
+		&p.UpdatedAt,
+		&p.Billable,
+		&p.BudgetType,
+		&p.BudgetTotal,
+		&p.BudgetPriority,
+	)
+	return p, err
+}
+
 const archiveProject = `-- name: ArchiveProject :one
 UPDATE projects
 SET archived_at = now(), updated_at = now()
 WHERE id = $1 AND archived_at IS NULL
-RETURNING id, name, client, color, notes, archived_at, created_at, updated_at, billable
-`
+RETURNING ` + projectSelectCols
 
 func (q *Queries) ArchiveProject(ctx context.Context, id pgtype.UUID) (Project, error) {
 	row := q.db.QueryRow(ctx, archiveProject, id)
-	var i Project
-	err := row.Scan(
-		&i.ID,
-		&i.Name,
-		&i.Client,
-		&i.Color,
-		&i.Notes,
-		&i.ArchivedAt,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.Billable,
-	)
-	return i, err
+	return scanProject(row)
 }
 
 const createAssignment = `-- name: CreateAssignment :one
@@ -170,17 +180,19 @@ func (q *Queries) CreatePerson(ctx context.Context, arg CreatePersonParams) (Per
 }
 
 const createProject = `-- name: CreateProject :one
-INSERT INTO projects (name, client, color, notes, billable)
-VALUES ($1, $2, $3, $4, $5)
-RETURNING id, name, client, color, notes, archived_at, created_at, updated_at, billable
-`
+INSERT INTO projects (name, client, color, notes, billable, budget_type, budget_total, budget_priority)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+RETURNING ` + projectSelectCols
 
 type CreateProjectParams struct {
-	Name     string `json:"name"`
-	Client   string `json:"client"`
-	Color    string `json:"color"`
-	Notes    string `json:"notes"`
-	Billable bool   `json:"billable"`
+	Name           string         `json:"name"`
+	Client         string         `json:"client"`
+	Color          string         `json:"color"`
+	Notes          string         `json:"notes"`
+	Billable       bool           `json:"billable"`
+	BudgetType     pgtype.Int2    `json:"budget_type"`
+	BudgetTotal    pgtype.Numeric `json:"budget_total"`
+	BudgetPriority pgtype.Int2    `json:"budget_priority"`
 }
 
 func (q *Queries) CreateProject(ctx context.Context, arg CreateProjectParams) (Project, error) {
@@ -190,20 +202,11 @@ func (q *Queries) CreateProject(ctx context.Context, arg CreateProjectParams) (P
 		arg.Color,
 		arg.Notes,
 		arg.Billable,
+		arg.BudgetType,
+		arg.BudgetTotal,
+		arg.BudgetPriority,
 	)
-	var i Project
-	err := row.Scan(
-		&i.ID,
-		&i.Name,
-		&i.Client,
-		&i.Color,
-		&i.Notes,
-		&i.ArchivedAt,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.Billable,
-	)
-	return i, err
+	return scanProject(row)
 }
 
 const createTimeOff = `-- name: CreateTimeOff :one
@@ -349,24 +352,12 @@ func (q *Queries) GetPerson(ctx context.Context, id pgtype.UUID) (Person, error)
 }
 
 const getProject = `-- name: GetProject :one
-SELECT id, name, client, color, notes, archived_at, created_at, updated_at, billable FROM projects WHERE id = $1
+SELECT ` + projectSelectCols + ` FROM projects WHERE id = $1
 `
 
 func (q *Queries) GetProject(ctx context.Context, id pgtype.UUID) (Project, error) {
 	row := q.db.QueryRow(ctx, getProject, id)
-	var i Project
-	err := row.Scan(
-		&i.ID,
-		&i.Name,
-		&i.Client,
-		&i.Color,
-		&i.Notes,
-		&i.ArchivedAt,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.Billable,
-	)
-	return i, err
+	return scanProject(row)
 }
 
 const getTimeOff = `-- name: GetTimeOff :one
@@ -531,7 +522,7 @@ func (q *Queries) ListPeople(ctx context.Context, includeArchived bool) ([]Perso
 
 const listProjects = `-- name: ListProjects :many
 
-SELECT id, name, client, color, notes, archived_at, created_at, updated_at, billable FROM projects
+SELECT ` + projectSelectCols + ` FROM projects
 WHERE
     ($1::boolean OR archived_at IS NULL)
 ORDER BY name ASC
@@ -546,21 +537,11 @@ func (q *Queries) ListProjects(ctx context.Context, includeArchived bool) ([]Pro
 	defer rows.Close()
 	var items []Project
 	for rows.Next() {
-		var i Project
-		if err := rows.Scan(
-			&i.ID,
-			&i.Name,
-			&i.Client,
-			&i.Color,
-			&i.Notes,
-			&i.ArchivedAt,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-			&i.Billable,
-		); err != nil {
+		p, err := scanProject(rows)
+		if err != nil {
 			return nil, err
 		}
-		items = append(items, i)
+		items = append(items, p)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -640,24 +621,11 @@ const unarchiveProject = `-- name: UnarchiveProject :one
 UPDATE projects
 SET archived_at = NULL, updated_at = now()
 WHERE id = $1
-RETURNING id, name, client, color, notes, archived_at, created_at, updated_at, billable
-`
+RETURNING ` + projectSelectCols
 
 func (q *Queries) UnarchiveProject(ctx context.Context, id pgtype.UUID) (Project, error) {
 	row := q.db.QueryRow(ctx, unarchiveProject, id)
-	var i Project
-	err := row.Scan(
-		&i.ID,
-		&i.Name,
-		&i.Client,
-		&i.Color,
-		&i.Notes,
-		&i.ArchivedAt,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.Billable,
-	)
-	return i, err
+	return scanProject(row)
 }
 
 const updateAssignment = `-- name: UpdateAssignment :one
@@ -793,23 +761,28 @@ func (q *Queries) UpdatePerson(ctx context.Context, arg UpdatePersonParams) (Per
 
 const updateProject = `-- name: UpdateProject :one
 UPDATE projects
-SET name = $2,
-    client = $3,
-    color = $4,
-    notes = $5,
-    billable = $6,
-    updated_at = now()
+SET name            = $2,
+    client          = $3,
+    color           = $4,
+    notes           = $5,
+    billable        = $6,
+    budget_type     = $7,
+    budget_total    = $8,
+    budget_priority = $9,
+    updated_at      = now()
 WHERE id = $1
-RETURNING id, name, client, color, notes, archived_at, created_at, updated_at, billable
-`
+RETURNING ` + projectSelectCols
 
 type UpdateProjectParams struct {
-	ID       pgtype.UUID `json:"id"`
-	Name     string      `json:"name"`
-	Client   string      `json:"client"`
-	Color    string      `json:"color"`
-	Notes    string      `json:"notes"`
-	Billable bool        `json:"billable"`
+	ID             pgtype.UUID    `json:"id"`
+	Name           string         `json:"name"`
+	Client         string         `json:"client"`
+	Color          string         `json:"color"`
+	Notes          string         `json:"notes"`
+	Billable       bool           `json:"billable"`
+	BudgetType     pgtype.Int2    `json:"budget_type"`
+	BudgetTotal    pgtype.Numeric `json:"budget_total"`
+	BudgetPriority pgtype.Int2    `json:"budget_priority"`
 }
 
 func (q *Queries) UpdateProject(ctx context.Context, arg UpdateProjectParams) (Project, error) {
@@ -820,20 +793,11 @@ func (q *Queries) UpdateProject(ctx context.Context, arg UpdateProjectParams) (P
 		arg.Color,
 		arg.Notes,
 		arg.Billable,
+		arg.BudgetType,
+		arg.BudgetTotal,
+		arg.BudgetPriority,
 	)
-	var i Project
-	err := row.Scan(
-		&i.ID,
-		&i.Name,
-		&i.Client,
-		&i.Color,
-		&i.Notes,
-		&i.ArchivedAt,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.Billable,
-	)
-	return i, err
+	return scanProject(row)
 }
 
 const updateTimeOff = `-- name: UpdateTimeOff :one

@@ -1,6 +1,17 @@
 <script setup lang="ts">
 import { useAuthStore } from '~/stores/auth'
-import type { Project, ProjectInput } from '~/types/api'
+import type {
+  Project,
+  ProjectBudgetPriority,
+  ProjectBudgetType,
+  ProjectInput,
+} from '~/types/api'
+
+type BudgetFormState = {
+  type: ProjectBudgetType | ''
+  total: number | ''
+  priority: ProjectBudgetPriority | ''
+}
 
 const auth = useAuthStore()
 const { call } = useApi()
@@ -13,9 +24,27 @@ const error = ref<string | null>(null)
 const showForm = ref(false)
 const editing = ref<Project | null>(null)
 const form = ref<ProjectInput>(emptyForm())
+const budgetForm = ref<BudgetFormState>(emptyBudget())
 
 function emptyForm(): ProjectInput {
   return { name: '', client: '', color: '#0EA5E9', notes: '', billable: true }
+}
+
+function emptyBudget(): BudgetFormState {
+  return { type: '', total: '', priority: '' }
+}
+
+function budgetTypeLabel(t: ProjectBudgetType | null): string {
+  return t === 1 ? 'Total hours' : t === 2 ? 'Total fee' : t === 3 ? 'Hourly fee' : '—'
+}
+
+function budgetPriorityLabel(p: ProjectBudgetPriority | null): string {
+  return p === 0 ? 'Project' : p === 1 ? 'Phase' : p === 2 ? 'Task' : '—'
+}
+
+function formatBudgetTotal(p: Project): string {
+  if (p.budget_total === null) return '—'
+  return p.budget_type === 1 ? `${p.budget_total} h` : `${p.budget_total}`
 }
 
 async function load() {
@@ -34,21 +63,31 @@ async function load() {
 function openCreate() {
   editing.value = null
   form.value = emptyForm()
+  budgetForm.value = emptyBudget()
   showForm.value = true
 }
 
 function openEdit(p: Project) {
   editing.value = p
   form.value = { name: p.name, client: p.client, color: p.color, notes: p.notes, billable: p.billable }
+  budgetForm.value = {
+    type: p.budget_type ?? '',
+    total: p.budget_total ?? '',
+    priority: p.budget_priority ?? '',
+  }
   showForm.value = true
 }
 
 async function submit() {
   try {
+    const body: ProjectInput = { ...form.value }
+    body.budget_type = budgetForm.value.type === '' ? null : (Number(budgetForm.value.type) as ProjectBudgetType)
+    body.budget_total = budgetForm.value.total === '' ? null : Number(budgetForm.value.total)
+    body.budget_priority = budgetForm.value.priority === '' ? null : (Number(budgetForm.value.priority) as ProjectBudgetPriority)
     if (editing.value) {
-      await call(`/api/projects/${editing.value.id}`, { method: 'PATCH', body: form.value })
+      await call(`/api/projects/${editing.value.id}`, { method: 'PATCH', body })
     } else {
-      await call('/api/projects', { method: 'POST', body: form.value })
+      await call('/api/projects', { method: 'POST', body })
     }
     showForm.value = false
     await load()
@@ -106,16 +145,17 @@ onMounted(load)
             <th class="px-4 py-2">Name</th>
             <th class="px-4 py-2">Client</th>
             <th class="px-4 py-2">Billable</th>
+            <th class="px-4 py-2">Budget</th>
             <th class="px-4 py-2">Status</th>
             <th class="px-4 py-2"></th>
           </tr>
         </thead>
         <tbody class="divide-y divide-slate-100">
           <tr v-if="loading">
-            <td colspan="6" class="px-4 py-6 text-center text-slate-400">Loading…</td>
+            <td colspan="7" class="px-4 py-6 text-center text-slate-400">Loading…</td>
           </tr>
           <tr v-else-if="!projects.length">
-            <td colspan="6" class="px-4 py-6 text-center text-slate-400">No projects yet.</td>
+            <td colspan="7" class="px-4 py-6 text-center text-slate-400">No projects yet.</td>
           </tr>
           <tr v-for="p in projects" :key="p.id" class="hover:bg-slate-50" :data-cy="`project-row-${p.name}`">
             <td class="px-4 py-2">
@@ -142,6 +182,16 @@ onMounted(load)
                 data-cy="non-billable-badge"
                 class="rounded bg-amber-100 px-1.5 py-0.5 text-xs text-amber-700"
               >Non-billable</span>
+            </td>
+            <td class="px-4 py-2 text-xs text-slate-600" data-cy="project-budget-cell">
+              <template v-if="p.budget_type !== null">
+                <div data-cy="project-budget-type">{{ budgetTypeLabel(p.budget_type) }}</div>
+                <div data-cy="project-budget-total">{{ formatBudgetTotal(p) }}</div>
+                <div class="text-[10px] uppercase text-slate-400" data-cy="project-budget-priority">
+                  {{ budgetPriorityLabel(p.budget_priority) }}-level
+                </div>
+              </template>
+              <span v-else class="text-slate-400">—</span>
             </td>
             <td class="px-4 py-2">
               <span v-if="p.status === 'archived'" class="rounded bg-slate-200 px-1.5 py-0.5 text-xs text-slate-700">Archived</span>
@@ -190,9 +240,52 @@ onMounted(load)
               Billable
             </label>
           </div>
+          <fieldset class="space-y-2 rounded border border-slate-200 p-3" data-cy="project-budget-fieldset">
+            <legend class="px-1 text-xs font-medium text-slate-600">Budget</legend>
+            <div class="grid grid-cols-2 gap-2">
+              <div>
+                <label class="block text-xs font-medium text-slate-600">Budget type</label>
+                <select
+                  v-model="budgetForm.type"
+                  data-cy="project-budget-type-input"
+                  class="mt-1 w-full rounded border border-slate-300 px-2 py-1.5"
+                >
+                  <option value="">None</option>
+                  <option :value="1">Total hours</option>
+                  <option :value="2">Total fee</option>
+                  <option :value="3">Hourly fee</option>
+                </select>
+              </div>
+              <div>
+                <label class="block text-xs font-medium text-slate-600">Budget priority</label>
+                <select
+                  v-model="budgetForm.priority"
+                  data-cy="project-budget-priority-input"
+                  class="mt-1 w-full rounded border border-slate-300 px-2 py-1.5"
+                >
+                  <option value="">None</option>
+                  <option :value="0">Project</option>
+                  <option :value="1">Phase</option>
+                  <option :value="2">Task</option>
+                </select>
+              </div>
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-slate-600">Budget total</label>
+              <input
+                v-model.number="budgetForm.total"
+                type="number"
+                min="0"
+                step="0.01"
+                data-cy="project-budget-total-input"
+                class="mt-1 w-full rounded border border-slate-300 px-2 py-1.5"
+                placeholder="Hours or amount"
+              >
+            </div>
+          </fieldset>
           <div class="flex justify-end gap-2 pt-2">
             <button type="button" class="rounded px-3 py-1.5 text-slate-600 hover:bg-slate-100" @click="showForm = false">Cancel</button>
-            <button type="submit" class="rounded bg-slate-900 px-3 py-1.5 text-white hover:bg-slate-700">Save</button>
+            <button type="submit" data-cy="project-save" class="rounded bg-slate-900 px-3 py-1.5 text-white hover:bg-slate-700">Save</button>
           </div>
         </form>
       </div>

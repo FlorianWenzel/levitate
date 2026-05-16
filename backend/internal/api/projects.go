@@ -10,19 +10,33 @@ import (
 	"github.com/florianwenzel/levitate/backend/internal/db"
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
+)
+
+// Float Project budget enums. See https://developer.float.com/swagger-api-v3.yaml
+//   budget_type: 1=Total hours, 2=Total fee, 3=Hourly fee
+//   budget_priority: 0=Project, 1=Phase, 2=Task
+const (
+	projectBudgetTypeMin     = 1
+	projectBudgetTypeMax     = 3
+	projectBudgetPriorityMin = 0
+	projectBudgetPriorityMax = 2
 )
 
 type projectDTO struct {
-	ID         string     `json:"id"`
-	Name       string     `json:"name"`
-	Client     string     `json:"client"`
-	Color      string     `json:"color"`
-	Notes      string     `json:"notes"`
-	Billable   bool       `json:"billable"`
-	Status     string     `json:"status"`
-	ArchivedAt *time.Time `json:"archived_at"`
-	CreatedAt  time.Time  `json:"created_at"`
-	UpdatedAt  time.Time  `json:"updated_at"`
+	ID             string     `json:"id"`
+	Name           string     `json:"name"`
+	Client         string     `json:"client"`
+	Color          string     `json:"color"`
+	Notes          string     `json:"notes"`
+	Billable       bool       `json:"billable"`
+	Status         string     `json:"status"`
+	BudgetType     *int       `json:"budget_type"`
+	BudgetTotal    *float64   `json:"budget_total"`
+	BudgetPriority *int       `json:"budget_priority"`
+	ArchivedAt     *time.Time `json:"archived_at"`
+	CreatedAt      time.Time  `json:"created_at"`
+	UpdatedAt      time.Time  `json:"updated_at"`
 }
 
 func toProjectDTO(p db.Project) projectDTO {
@@ -30,33 +44,81 @@ func toProjectDTO(p db.Project) projectDTO {
 	if p.ArchivedAt.Valid {
 		status = "archived"
 	}
+	var bt *int
+	if p.BudgetType.Valid {
+		v := int(p.BudgetType.Int16)
+		bt = &v
+	}
+	var bp *int
+	if p.BudgetPriority.Valid {
+		v := int(p.BudgetPriority.Int16)
+		bp = &v
+	}
+	var btot *float64
+	if p.BudgetTotal.Valid {
+		v := numericFloat(p.BudgetTotal)
+		btot = &v
+	}
 	return projectDTO{
-		ID:         uuidString(p.ID),
-		Name:       p.Name,
-		Client:     p.Client,
-		Color:      p.Color,
-		Notes:      p.Notes,
-		Billable:   p.Billable,
-		Status:     status,
-		ArchivedAt: tsPtr(p.ArchivedAt),
-		CreatedAt:  ts(p.CreatedAt),
-		UpdatedAt:  ts(p.UpdatedAt),
+		ID:             uuidString(p.ID),
+		Name:           p.Name,
+		Client:         p.Client,
+		Color:          p.Color,
+		Notes:          p.Notes,
+		Billable:       p.Billable,
+		Status:         status,
+		BudgetType:     bt,
+		BudgetTotal:    btot,
+		BudgetPriority: bp,
+		ArchivedAt:     tsPtr(p.ArchivedAt),
+		CreatedAt:      ts(p.CreatedAt),
+		UpdatedAt:      ts(p.UpdatedAt),
 	}
 }
 
 type projectInput struct {
-	Name     string `json:"name"`
-	Client   string `json:"client"`
-	Color    string `json:"color"`
-	Notes    string `json:"notes"`
-	Billable *bool  `json:"billable"`
+	Name           string   `json:"name"`
+	Client         string   `json:"client"`
+	Color          string   `json:"color"`
+	Notes          string   `json:"notes"`
+	Billable       *bool    `json:"billable"`
+	BudgetType     *int     `json:"budget_type"`
+	BudgetTotal    *float64 `json:"budget_total"`
+	BudgetPriority *int     `json:"budget_priority"`
 }
 
 func (in projectInput) validate() string {
 	if in.Name == "" {
 		return "name is required"
 	}
+	if in.BudgetType != nil && (*in.BudgetType < projectBudgetTypeMin || *in.BudgetType > projectBudgetTypeMax) {
+		return "budget_type must be 1 (Total hours), 2 (Total fee), or 3 (Hourly fee)"
+	}
+	if in.BudgetPriority != nil && (*in.BudgetPriority < projectBudgetPriorityMin || *in.BudgetPriority > projectBudgetPriorityMax) {
+		return "budget_priority must be 0 (Project), 1 (Phase), or 2 (Task)"
+	}
+	if in.BudgetTotal != nil && *in.BudgetTotal < 0 {
+		return "budget_total must be >= 0"
+	}
 	return ""
+}
+
+func (in projectInput) budgetParams() (pgtype.Int2, pgtype.Numeric, pgtype.Int2) {
+	var bt pgtype.Int2
+	if in.BudgetType != nil {
+		bt = pgtype.Int2{Int16: int16(*in.BudgetType), Valid: true}
+	}
+	var bp pgtype.Int2
+	if in.BudgetPriority != nil {
+		bp = pgtype.Int2{Int16: int16(*in.BudgetPriority), Valid: true}
+	}
+	var btot pgtype.Numeric
+	if in.BudgetTotal != nil {
+		if n, err := numericFromFloat(*in.BudgetTotal); err == nil {
+			btot = n
+		}
+	}
+	return bt, btot, bp
 }
 
 type projectsHandler struct {
@@ -126,12 +188,16 @@ func (h *projectsHandler) create(w http.ResponseWriter, r *http.Request) {
 	if in.Billable != nil {
 		billable = *in.Billable
 	}
+	bt, btot, bp := in.budgetParams()
 	p, err := h.q.CreateProject(r.Context(), db.CreateProjectParams{
-		Name:     in.Name,
-		Client:   in.Client,
-		Color:    in.Color,
-		Notes:    in.Notes,
-		Billable: billable,
+		Name:           in.Name,
+		Client:         in.Client,
+		Color:          in.Color,
+		Notes:          in.Notes,
+		Billable:       billable,
+		BudgetType:     bt,
+		BudgetTotal:    btot,
+		BudgetPriority: bp,
 	})
 	if err != nil {
 		WriteProblem(w, r, http.StatusInternalServerError, "create_failed", err.Error())
@@ -159,13 +225,17 @@ func (h *projectsHandler) update(w http.ResponseWriter, r *http.Request) {
 	if in.Billable != nil {
 		billable = *in.Billable
 	}
+	bt, btot, bp := in.budgetParams()
 	p, err := h.q.UpdateProject(r.Context(), db.UpdateProjectParams{
-		ID:       id,
-		Name:     in.Name,
-		Client:   in.Client,
-		Color:    in.Color,
-		Notes:    in.Notes,
-		Billable: billable,
+		ID:             id,
+		Name:           in.Name,
+		Client:         in.Client,
+		Color:          in.Color,
+		Notes:          in.Notes,
+		Billable:       billable,
+		BudgetType:     bt,
+		BudgetTotal:    btot,
+		BudgetPriority: bp,
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {

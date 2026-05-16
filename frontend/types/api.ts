@@ -16,6 +16,12 @@ export type PersonInput = {
   weekly_capacity_hours: number
 }
 
+// Float Project budget enums (see https://developer.float.com/swagger-api-v3.yaml).
+// `budget_type`: 1=Total hours, 2=Total fee, 3=Hourly fee.
+// `budget_priority`: 0=Project-level, 1=Phase-level, 2=Task-level.
+export type ProjectBudgetType = 1 | 2 | 3
+export type ProjectBudgetPriority = 0 | 1 | 2
+
 export type Project = {
   id: string
   name: string
@@ -24,6 +30,9 @@ export type Project = {
   status: 'active' | 'archived'
   notes: string
   billable: boolean
+  budget_type: ProjectBudgetType | null
+  budget_total: number | null
+  budget_priority: ProjectBudgetPriority | null
   archived_at: string | null
   created_at: string
   updated_at: string
@@ -35,6 +44,9 @@ export type ProjectInput = {
   color: string
   notes: string
   billable: boolean
+  budget_type?: ProjectBudgetType | null
+  budget_total?: number | null
+  budget_priority?: ProjectBudgetPriority | null
 }
 
 export type Assignment = {
