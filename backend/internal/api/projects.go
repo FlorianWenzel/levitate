@@ -56,6 +56,80 @@ type projectDTO struct {
 	ArchivedAt     *time.Time `json:"archived_at"`
 	CreatedAt      time.Time  `json:"created_at"`
 	UpdatedAt      time.Time  `json:"updated_at"`
+
+	// Float-compatible expansions, only present when explicitly requested via
+	// `?expand=` (comma-separated). The `omitempty` tags keep the wire shape of
+	// non-expanded responses unchanged.
+	Expenses     []projectExpenseDTO `json:"expenses,omitempty"`
+	ProjectTasks []projectTaskDTO    `json:"project_tasks,omitempty"`
+	ProjectTeam  []projectTeamDTO    `json:"project_team,omitempty"`
+}
+
+// projectExpenseDTO mirrors Float's Project `expenses[]` schema. Levitate has
+// no expenses table yet, so an expanded response always returns an empty list;
+// shipping the field keeps the contract Float-compatible for clients.
+type projectExpenseDTO struct {
+	ExpenseID string  `json:"expense_id"`
+	Amount    float64 `json:"amount"`
+	Date      string  `json:"date"`
+	Note      string  `json:"note"`
+}
+
+// projectTaskDTO mirrors Float's Project `project_tasks[]` schema. Levitate's
+// assignments map 1:1 to Float tasks: the assignment UUID becomes the task_id
+// and the per-day hours surface as the task `hours` field.
+type projectTaskDTO struct {
+	TaskID   string  `json:"task_id"`
+	Name     string  `json:"name"`
+	Hours    float64 `json:"hours"`
+	PeopleID string  `json:"people_id"`
+}
+
+// projectTeamDTO mirrors Float's Project `project_team[]` schema. The
+// hourly_rate is sourced from the role whose name matches the person's
+// free-text role; 0 when no role matches.
+type projectTeamDTO struct {
+	PeopleID   string  `json:"people_id"`
+	HourlyRate float64 `json:"hourly_rate"`
+}
+
+// Comma-separated values accepted by `?expand=`. Unknown tokens are ignored so
+// new client versions degrade gracefully against older servers.
+const (
+	expandExpenses     = "expenses"
+	expandProjectTasks = "project_tasks"
+	expandProjectTeam  = "project_team"
+)
+
+type projectExpansions struct {
+	expenses     bool
+	projectTasks bool
+	projectTeam  bool
+}
+
+func (e projectExpansions) any() bool {
+	return e.expenses || e.projectTasks || e.projectTeam
+}
+
+// parseExpand turns a `?expand=expenses,project_tasks` query string into a
+// struct of which expansions the handler should fetch. Whitespace is trimmed
+// and unknown tokens are silently dropped.
+func parseExpand(raw string) projectExpansions {
+	var out projectExpansions
+	if raw == "" {
+		return out
+	}
+	for _, tok := range strings.Split(raw, ",") {
+		switch strings.TrimSpace(tok) {
+		case expandExpenses:
+			out.expenses = true
+		case expandProjectTasks:
+			out.projectTasks = true
+		case expandProjectTeam:
+			out.projectTeam = true
+		}
+	}
+	return out
 }
 
 func toProjectDTO(p db.Project) projectDTO {
@@ -232,6 +306,7 @@ func (h *projectsHandler) routes(r chi.Router) {
 
 func (h *projectsHandler) list(w http.ResponseWriter, r *http.Request) {
 	includeArchived := r.URL.Query().Get("include_archived") == "true"
+	expand := parseExpand(r.URL.Query().Get("expand"))
 	rows, err := h.q.ListProjects(r.Context(), includeArchived)
 	if err != nil {
 		WriteProblem(w, r, http.StatusInternalServerError, "list_failed", err.Error())
@@ -240,6 +315,16 @@ func (h *projectsHandler) list(w http.ResponseWriter, r *http.Request) {
 	out := make([]projectDTO, 0, len(rows))
 	for _, p := range rows {
 		out = append(out, toProjectDTO(p))
+	}
+	if expand.any() {
+		ids := make([]pgtype.UUID, 0, len(rows))
+		for _, p := range rows {
+			ids = append(ids, p.ID)
+		}
+		if err := h.applyExpansions(r, out, ids, expand); err != nil {
+			WriteProblem(w, r, http.StatusInternalServerError, "expand_failed", err.Error())
+			return
+		}
 	}
 	writeJSON(w, http.StatusOK, out)
 }
@@ -250,6 +335,7 @@ func (h *projectsHandler) get(w http.ResponseWriter, r *http.Request) {
 		WriteProblem(w, r, http.StatusBadRequest, "bad_id", err.Error())
 		return
 	}
+	expand := parseExpand(r.URL.Query().Get("expand"))
 	p, err := h.q.GetProject(r.Context(), id)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -259,7 +345,91 @@ func (h *projectsHandler) get(w http.ResponseWriter, r *http.Request) {
 		WriteProblem(w, r, http.StatusInternalServerError, "get_failed", err.Error())
 		return
 	}
-	writeJSON(w, http.StatusOK, toProjectDTO(p))
+	out := []projectDTO{toProjectDTO(p)}
+	if expand.any() {
+		if err := h.applyExpansions(r, out, []pgtype.UUID{p.ID}, expand); err != nil {
+			WriteProblem(w, r, http.StatusInternalServerError, "expand_failed", err.Error())
+			return
+		}
+	}
+	writeJSON(w, http.StatusOK, out[0])
+}
+
+// applyExpansions hydrates the requested Float-compatible expansion fields on
+// the projects in `out` (matched by id, hence the parallel `ids` slice). Each
+// expansion is fetched once for the whole set so the cost is O(1) DB queries
+// regardless of how many projects were listed.
+func (h *projectsHandler) applyExpansions(r *http.Request, out []projectDTO, ids []pgtype.UUID, e projectExpansions) error {
+	var tasks []db.ListProjectTasksByProjectsRow
+	var team []db.ListProjectTeamByProjectsRow
+	if e.projectTasks {
+		rows, err := h.q.ListProjectTasksByProjects(r.Context(), ids)
+		if err != nil {
+			return err
+		}
+		tasks = rows
+	}
+	if e.projectTeam {
+		rows, err := h.q.ListProjectTeamByProjects(r.Context(), ids)
+		if err != nil {
+			return err
+		}
+		team = rows
+	}
+	mergeExpansions(out, e, tasks, team)
+	return nil
+}
+
+// mergeExpansions attaches the fetched expansion rows onto the matching
+// project DTOs in `out`. Exported in spirit (package-private but unit-tested)
+// so the projection logic can be exercised without a database.
+func mergeExpansions(out []projectDTO, e projectExpansions, tasks []db.ListProjectTasksByProjectsRow, team []db.ListProjectTeamByProjectsRow) {
+	byID := make(map[string]int, len(out))
+	for i, p := range out {
+		byID[p.ID] = i
+	}
+
+	if e.projectTasks {
+		for i := range out {
+			out[i].ProjectTasks = []projectTaskDTO{}
+		}
+		for _, t := range tasks {
+			idx, ok := byID[uuidString(t.ProjectID)]
+			if !ok {
+				continue
+			}
+			out[idx].ProjectTasks = append(out[idx].ProjectTasks, projectTaskDTO{
+				TaskID:   uuidString(t.ID),
+				Name:     t.Notes,
+				Hours:    numericFloat(t.HoursPerDay),
+				PeopleID: uuidString(t.PersonID),
+			})
+		}
+	}
+
+	if e.projectTeam {
+		for i := range out {
+			out[i].ProjectTeam = []projectTeamDTO{}
+		}
+		for _, t := range team {
+			idx, ok := byID[uuidString(t.ProjectID)]
+			if !ok {
+				continue
+			}
+			out[idx].ProjectTeam = append(out[idx].ProjectTeam, projectTeamDTO{
+				PeopleID:   uuidString(t.PersonID),
+				HourlyRate: numericFloat(t.HourlyRate),
+			})
+		}
+	}
+
+	// Levitate has no expenses table; the field exists for Float-shape parity
+	// and always expands to an empty array.
+	if e.expenses {
+		for i := range out {
+			out[i].Expenses = []projectExpenseDTO{}
+		}
+	}
 }
 
 func (h *projectsHandler) create(w http.ResponseWriter, r *http.Request) {

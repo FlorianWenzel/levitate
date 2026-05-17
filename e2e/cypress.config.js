@@ -33,6 +33,16 @@ const floatMockData = {
       tags: ['design', 'frontend'],
       project_manager: 'Mock PM Alice',
       all_pms_schedule: true,
+      expenses: [
+        { expense_id: 91001, amount: 1200.5, date: '2026-06-01', note: 'Stock photography' },
+        { expense_id: 91002, amount: 450, date: '2026-06-03', note: 'Domain renewal' },
+      ],
+      project_tasks: [
+        { task_id: 401, name: 'Design sprint', hours: 6, people_id: 101 },
+      ],
+      project_team: [
+        { people_id: 101, hourly_rate: 260 },
+      ],
     },
     {
       project_id: 302,
@@ -49,6 +59,9 @@ const floatMockData = {
       tags: ['internal'],
       project_manager: null,
       all_pms_schedule: false,
+      expenses: [],
+      project_tasks: [],
+      project_team: [],
     },
   ],
   '/tasks': [

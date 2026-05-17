@@ -96,6 +96,30 @@ SET archived_at = now(), updated_at = now()
 WHERE id = $1 AND archived_at IS NULL
 RETURNING *;
 
+-- Project task rows for the Float `project_tasks[]` expansion. Each assignment
+-- maps to one Float "task" with the assignment's hours_per_day surfaced as the
+-- task `hours` field. The task name is derived from the assignment notes.
+-- name: ListProjectTasksByProjects :many
+SELECT id, project_id, person_id, hours_per_day, notes
+FROM assignments
+WHERE project_id = ANY(sqlc.arg(project_ids)::uuid[])
+ORDER BY project_id, id;
+
+-- Distinct project team members for the Float `project_team[]` expansion. The
+-- hourly_rate is taken from the role whose name matches the person's free-text
+-- role (case-insensitive); when no matching role exists the rate is 0, which
+-- still satisfies Float's `{ people_id, hourly_rate }` contract.
+-- name: ListProjectTeamByProjects :many
+SELECT DISTINCT
+    a.project_id,
+    a.person_id,
+    COALESCE(r.default_hourly_rate, 0::numeric(12,3)) AS hourly_rate
+FROM assignments a
+JOIN people p ON p.id = a.person_id
+LEFT JOIN roles r ON lower(r.name) = lower(p.role)
+WHERE a.project_id = ANY(sqlc.arg(project_ids)::uuid[])
+ORDER BY a.project_id, a.person_id;
+
 -- name: UnarchiveProject :one
 UPDATE projects
 SET archived_at = NULL, updated_at = now()
