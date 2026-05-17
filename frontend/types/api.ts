@@ -152,6 +152,12 @@ export type LoggedTime = {
   // field existed) may have no local user to attribute them to.
   created_by: string | null
   modified_by: string | null
+  // `task_name` and `task_meta_id` mirror Float's LoggedTime schema: the
+  // display name of the associated task and the unique identifier for the
+  // linked task metadata. Both are nullable because not every logged-time
+  // entry is tied to a Float task.
+  task_name: string | null
+  task_meta_id: string | null
   created_at: string
   updated_at: string
 }
@@ -162,6 +168,8 @@ export type LoggedTimeInput = {
   hours: number
   notes?: string
   project_id?: string | null
+  task_name?: string | null
+  task_meta_id?: string | null
 }
 
 export type Milestone = {

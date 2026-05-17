@@ -38,6 +38,27 @@ func uuidStringPtr(u pgtype.UUID) *string {
 	return &s
 }
 
+// textPtr returns nil for an unset pgtype.Text so JSON serialization emits
+// `null` rather than `""`, matching Float's contract for nullable text fields
+// like `task_name` / `task_meta_id`.
+func textPtr(t pgtype.Text) *string {
+	if !t.Valid {
+		return nil
+	}
+	s := t.String
+	return &s
+}
+
+// pgText converts a *string into a pgtype.Text. A nil pointer or empty string
+// yields an invalid (NULL) value — matching Float's behavior where unset task
+// metadata is absent rather than empty.
+func pgText(s *string) pgtype.Text {
+	if s == nil || *s == "" {
+		return pgtype.Text{}
+	}
+	return pgtype.Text{String: *s, Valid: true}
+}
+
 func tsPtr(t pgtype.Timestamptz) *time.Time {
 	if !t.Valid {
 		return nil

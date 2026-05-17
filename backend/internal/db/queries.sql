@@ -268,19 +268,21 @@ ORDER BY date ASC, id ASC;
 SELECT * FROM logged_time WHERE id = $1;
 
 -- name: CreateLoggedTime :one
-INSERT INTO logged_time (person_id, date, hours, billable, notes, project_id, created_by, modified_by)
-VALUES ($1, $2, $3, $4, $5, $6, sqlc.arg(actor_id), sqlc.arg(actor_id))
+INSERT INTO logged_time (person_id, date, hours, billable, notes, project_id, created_by, modified_by, task_name, task_meta_id)
+VALUES ($1, $2, $3, $4, $5, $6, sqlc.arg(actor_id), sqlc.arg(actor_id), sqlc.arg(task_name), sqlc.arg(task_meta_id))
 RETURNING *;
 
 -- name: UpdateLoggedTime :one
 UPDATE logged_time
-SET date        = $2,
-    hours       = $3,
-    billable    = $4,
-    notes       = $5,
-    project_id  = $6,
-    modified_by = sqlc.arg(actor_id),
-    updated_at  = now()
+SET date         = $2,
+    hours        = $3,
+    billable     = $4,
+    notes        = $5,
+    project_id   = $6,
+    modified_by  = sqlc.arg(actor_id),
+    task_name    = sqlc.arg(task_name),
+    task_meta_id = sqlc.arg(task_meta_id),
+    updated_at   = now()
 WHERE id = $1
 RETURNING *;
 

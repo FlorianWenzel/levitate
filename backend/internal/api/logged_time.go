@@ -25,6 +25,8 @@ type loggedTimeDTO struct {
 	LockedDate *time.Time `json:"locked_date"`
 	CreatedBy  *string    `json:"created_by"`
 	ModifiedBy *string    `json:"modified_by"`
+	TaskName   *string    `json:"task_name"`
+	TaskMetaID *string    `json:"task_meta_id"`
 	CreatedAt  time.Time  `json:"created_at"`
 	UpdatedAt  time.Time  `json:"updated_at"`
 }
@@ -47,6 +49,8 @@ func toLoggedTimeDTO(l db.LoggedTime) loggedTimeDTO {
 		LockedDate: tsPtr(l.LockedDate),
 		CreatedBy:  uuidStringPtr(l.CreatedBy),
 		ModifiedBy: uuidStringPtr(l.ModifiedBy),
+		TaskName:   textPtr(l.TaskName),
+		TaskMetaID: textPtr(l.TaskMetaID),
 		CreatedAt:  ts(l.CreatedAt),
 		UpdatedAt:  ts(l.UpdatedAt),
 	}
@@ -57,11 +61,13 @@ func toLoggedTimeDTO(l db.LoggedTime) loggedTimeDTO {
 // projections of project/phase/task lock settings, so we accept lock
 // transitions only via the dedicated /lock and /unlock admin endpoints.
 type loggedTimeInput struct {
-	PersonID  string  `json:"person_id"`
-	Date      string  `json:"date"`
-	Hours     float64 `json:"hours"`
-	Notes     string  `json:"notes"`
-	ProjectID *string `json:"project_id"`
+	PersonID   string  `json:"person_id"`
+	Date       string  `json:"date"`
+	Hours      float64 `json:"hours"`
+	Notes      string  `json:"notes"`
+	ProjectID  *string `json:"project_id"`
+	TaskName   *string `json:"task_name"`
+	TaskMetaID *string `json:"task_meta_id"`
 }
 
 func (in loggedTimeInput) validate() string {
@@ -86,10 +92,12 @@ func (in loggedTimeInput) validate() string {
 // time, matching Float's contract. locked / locked_date are likewise omitted
 // — flip them via the /lock and /unlock admin endpoints, not via PATCH.
 type loggedTimePatch struct {
-	Date      *string  `json:"date"`
-	Hours     *float64 `json:"hours"`
-	Notes     *string  `json:"notes"`
-	ProjectID *string  `json:"project_id"`
+	Date       *string  `json:"date"`
+	Hours      *float64 `json:"hours"`
+	Notes      *string  `json:"notes"`
+	ProjectID  *string  `json:"project_id"`
+	TaskName   *string  `json:"task_name"`
+	TaskMetaID *string  `json:"task_meta_id"`
 }
 
 type loggedTimeHandler struct {
@@ -200,13 +208,15 @@ func (h *loggedTimeHandler) create(w http.ResponseWriter, r *http.Request) {
 	actorID := h.actorID(r)
 
 	l, err := h.q.CreateLoggedTime(r.Context(), db.CreateLoggedTimeParams{
-		PersonID:  personID,
-		Date:      date,
-		Hours:     hours,
-		Billable:  billable,
-		Notes:     in.Notes,
-		ProjectID: projectID,
-		ActorID:   actorID,
+		PersonID:   personID,
+		Date:       date,
+		Hours:      hours,
+		Billable:   billable,
+		Notes:      in.Notes,
+		ProjectID:  projectID,
+		ActorID:    actorID,
+		TaskName:   pgText(in.TaskName),
+		TaskMetaID: pgText(in.TaskMetaID),
 	})
 	if err != nil {
 		WriteProblem(w, r, http.StatusInternalServerError, "create_failed", err.Error())
@@ -277,14 +287,25 @@ func (h *loggedTimeHandler) update(w http.ResponseWriter, r *http.Request) {
 		billable = b
 	}
 
+	taskName := existing.TaskName
+	if patch.TaskName != nil {
+		taskName = pgText(patch.TaskName)
+	}
+	taskMetaID := existing.TaskMetaID
+	if patch.TaskMetaID != nil {
+		taskMetaID = pgText(patch.TaskMetaID)
+	}
+
 	l, err := h.q.UpdateLoggedTime(r.Context(), db.UpdateLoggedTimeParams{
-		ID:        id,
-		Date:      date,
-		Hours:     hours,
-		Billable:  billable,
-		Notes:     notes,
-		ProjectID: projectID,
-		ActorID:   h.actorID(r),
+		ID:         id,
+		Date:       date,
+		Hours:      hours,
+		Billable:   billable,
+		Notes:      notes,
+		ProjectID:  projectID,
+		ActorID:    h.actorID(r),
+		TaskName:   taskName,
+		TaskMetaID: taskMetaID,
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {

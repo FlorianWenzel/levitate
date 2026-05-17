@@ -26,11 +26,13 @@ type LoggedTime struct {
 	LockedDate pgtype.Timestamptz `json:"locked_date"`
 	CreatedBy  pgtype.UUID        `json:"created_by"`
 	ModifiedBy pgtype.UUID        `json:"modified_by"`
+	TaskName   pgtype.Text        `json:"task_name"`
+	TaskMetaID pgtype.Text        `json:"task_meta_id"`
 	CreatedAt  pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt  pgtype.Timestamptz `json:"updated_at"`
 }
 
-const loggedTimeSelectCols = `id, person_id, date, hours, billable, notes, project_id, float_id, locked, locked_date, created_by, modified_by, created_at, updated_at`
+const loggedTimeSelectCols = `id, person_id, date, hours, billable, notes, project_id, float_id, locked, locked_date, created_by, modified_by, task_name, task_meta_id, created_at, updated_at`
 
 func scanLoggedTime(scanner interface {
 	Scan(dest ...any) error
@@ -49,6 +51,8 @@ func scanLoggedTime(scanner interface {
 		&i.LockedDate,
 		&i.CreatedBy,
 		&i.ModifiedBy,
+		&i.TaskName,
+		&i.TaskMetaID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -104,19 +108,21 @@ func (q *Queries) GetLoggedTime(ctx context.Context, id pgtype.UUID) (LoggedTime
 }
 
 const createLoggedTime = `-- name: CreateLoggedTime :one
-INSERT INTO logged_time (person_id, date, hours, billable, notes, project_id, created_by, modified_by)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $7)
+INSERT INTO logged_time (person_id, date, hours, billable, notes, project_id, created_by, modified_by, task_name, task_meta_id)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $7, $8, $9)
 RETURNING ` + loggedTimeSelectCols + `
 `
 
 type CreateLoggedTimeParams struct {
-	PersonID  pgtype.UUID    `json:"person_id"`
-	Date      pgtype.Date    `json:"date"`
-	Hours     pgtype.Numeric `json:"hours"`
-	Billable  bool           `json:"billable"`
-	Notes     string         `json:"notes"`
-	ProjectID pgtype.UUID    `json:"project_id"`
-	ActorID   pgtype.UUID    `json:"actor_id"`
+	PersonID   pgtype.UUID    `json:"person_id"`
+	Date       pgtype.Date    `json:"date"`
+	Hours      pgtype.Numeric `json:"hours"`
+	Billable   bool           `json:"billable"`
+	Notes      string         `json:"notes"`
+	ProjectID  pgtype.UUID    `json:"project_id"`
+	ActorID    pgtype.UUID    `json:"actor_id"`
+	TaskName   pgtype.Text    `json:"task_name"`
+	TaskMetaID pgtype.Text    `json:"task_meta_id"`
 }
 
 func (q *Queries) CreateLoggedTime(ctx context.Context, arg CreateLoggedTimeParams) (LoggedTime, error) {
@@ -128,31 +134,37 @@ func (q *Queries) CreateLoggedTime(ctx context.Context, arg CreateLoggedTimePara
 		arg.Notes,
 		arg.ProjectID,
 		arg.ActorID,
+		arg.TaskName,
+		arg.TaskMetaID,
 	)
 	return scanLoggedTime(row)
 }
 
 const updateLoggedTime = `-- name: UpdateLoggedTime :one
 UPDATE logged_time
-SET date        = $2,
-    hours       = $3,
-    billable    = $4,
-    notes       = $5,
-    project_id  = $6,
-    modified_by = $7,
-    updated_at  = now()
+SET date         = $2,
+    hours        = $3,
+    billable     = $4,
+    notes        = $5,
+    project_id   = $6,
+    modified_by  = $7,
+    task_name    = $8,
+    task_meta_id = $9,
+    updated_at   = now()
 WHERE id = $1
 RETURNING ` + loggedTimeSelectCols + `
 `
 
 type UpdateLoggedTimeParams struct {
-	ID        pgtype.UUID    `json:"id"`
-	Date      pgtype.Date    `json:"date"`
-	Hours     pgtype.Numeric `json:"hours"`
-	Billable  bool           `json:"billable"`
-	Notes     string         `json:"notes"`
-	ProjectID pgtype.UUID    `json:"project_id"`
-	ActorID   pgtype.UUID    `json:"actor_id"`
+	ID         pgtype.UUID    `json:"id"`
+	Date       pgtype.Date    `json:"date"`
+	Hours      pgtype.Numeric `json:"hours"`
+	Billable   bool           `json:"billable"`
+	Notes      string         `json:"notes"`
+	ProjectID  pgtype.UUID    `json:"project_id"`
+	ActorID    pgtype.UUID    `json:"actor_id"`
+	TaskName   pgtype.Text    `json:"task_name"`
+	TaskMetaID pgtype.Text    `json:"task_meta_id"`
 }
 
 func (q *Queries) UpdateLoggedTime(ctx context.Context, arg UpdateLoggedTimeParams) (LoggedTime, error) {
@@ -164,6 +176,8 @@ func (q *Queries) UpdateLoggedTime(ctx context.Context, arg UpdateLoggedTimePara
 		arg.Notes,
 		arg.ProjectID,
 		arg.ActorID,
+		arg.TaskName,
+		arg.TaskMetaID,
 	)
 	return scanLoggedTime(row)
 }

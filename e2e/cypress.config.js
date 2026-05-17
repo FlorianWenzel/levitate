@@ -110,6 +110,8 @@ const floatMockData = {
       locked_date: null,
       created_by: 9001,
       modified_by: 9001,
+      task_name: 'Design sprint',
+      task_meta_id: 'meta-401',
     },
   ],
   '/statuses': [

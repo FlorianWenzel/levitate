@@ -158,6 +158,8 @@ type floatLoggedTime struct {
 	Notes      string  `json:"notes"`
 	Locked     *int    `json:"locked"`
 	LockedDate string  `json:"locked_date"`
+	TaskName   string  `json:"task_name"`
+	TaskMetaID string  `json:"task_meta_id"`
 }
 
 // floatDeletedEntry models Float's /deleted/<entity> response rows.
@@ -812,6 +814,15 @@ func (h *floatImportHandler) importFloatData(ctx context.Context, people []float
 		}
 		notes := strings.TrimSpace(fl.Notes)
 
+		var taskName pgtype.Text
+		if tn := strings.TrimSpace(fl.TaskName); tn != "" {
+			taskName = pgtype.Text{String: tn, Valid: true}
+		}
+		var taskMetaID pgtype.Text
+		if tm := strings.TrimSpace(fl.TaskMetaID); tm != "" {
+			taskMetaID = pgtype.Text{String: tm, Valid: true}
+		}
+
 		locked := fl.Locked != nil && *fl.Locked == 1
 
 		// Upsert by Float ID: if we've already imported this row, update in
@@ -836,13 +847,15 @@ func (h *floatImportHandler) importFloatData(ctx context.Context, people []float
 					// content update to avoid clobbering an already-locked
 					// snapshot.
 					if _, err := q.UpdateLoggedTime(ctx, db.UpdateLoggedTimeParams{
-						ID:        existing.ID,
-						Date:      date,
-						Hours:     hours,
-						Billable:  billable,
-						Notes:     notes,
-						ProjectID: projectID,
-						ActorID:   actorID,
+						ID:         existing.ID,
+						Date:       date,
+						Hours:      hours,
+						Billable:   billable,
+						Notes:      notes,
+						ProjectID:  projectID,
+						ActorID:    actorID,
+						TaskName:   taskName,
+						TaskMetaID: taskMetaID,
 					}); err != nil {
 						return result, err
 					}
@@ -855,13 +868,15 @@ func (h *floatImportHandler) importFloatData(ctx context.Context, people []float
 		}
 
 		created, err := q.CreateLoggedTime(ctx, db.CreateLoggedTimeParams{
-			PersonID:  personID,
-			Date:      date,
-			Hours:     hours,
-			Billable:  billable,
-			Notes:     notes,
-			ProjectID: projectID,
-			ActorID:   actorID,
+			PersonID:   personID,
+			Date:       date,
+			Hours:      hours,
+			Billable:   billable,
+			Notes:      notes,
+			ProjectID:  projectID,
+			ActorID:    actorID,
+			TaskName:   taskName,
+			TaskMetaID: taskMetaID,
 		})
 		if err != nil {
 			return result, err
