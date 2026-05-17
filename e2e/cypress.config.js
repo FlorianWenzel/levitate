@@ -29,6 +29,7 @@ const floatMockData = {
       budget_type: 2,
       budget_total: 25000,
       budget_priority: 0,
+      tags: ['design', 'frontend'],
     },
     {
       project_id: 302,
@@ -41,6 +42,7 @@ const floatMockData = {
       budget_type: 1,
       budget_total: 120,
       budget_priority: 1,
+      tags: ['internal'],
     },
   ],
   '/tasks': [

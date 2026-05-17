@@ -58,6 +58,7 @@ describe('Float import', () => {
           budget_type: 2,
           budget_total: 25000,
           budget_priority: 0,
+          tags: ['design', 'frontend'],
           archived_at: null,
           created_at: project.created_at,
           updated_at: project.updated_at,

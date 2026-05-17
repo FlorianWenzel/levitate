@@ -33,6 +33,7 @@ export type Project = {
   budget_type: ProjectBudgetType | null
   budget_total: number | null
   budget_priority: ProjectBudgetPriority | null
+  tags: string[]
   archived_at: string | null
   created_at: string
   updated_at: string
@@ -47,6 +48,7 @@ export type ProjectInput = {
   budget_type?: ProjectBudgetType | null
   budget_total?: number | null
   budget_priority?: ProjectBudgetPriority | null
+  tags?: string[]
 }
 
 export type Assignment = {

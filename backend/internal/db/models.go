@@ -84,6 +84,7 @@ type Project struct {
 	BudgetType     pgtype.Int2        `json:"budget_type"`
 	BudgetTotal    pgtype.Numeric     `json:"budget_total"`
 	BudgetPriority pgtype.Int2        `json:"budget_priority"`
+	Tags           []string           `json:"tags"`
 }
 
 type TimeOff struct {
