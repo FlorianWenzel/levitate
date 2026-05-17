@@ -60,6 +60,8 @@ describe('Float import', () => {
           budget_priority: 0,
           tags: ['design', 'frontend'],
           project_code: 'WEB-001',
+          project_manager: 'Mock PM Alice',
+          all_pms_schedule: true,
           archived_at: null,
           created_at: project.created_at,
           updated_at: project.updated_at,

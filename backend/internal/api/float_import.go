@@ -93,6 +93,8 @@ type floatProject struct {
 	BudgetTotal    *float64 `json:"budget_total"`
 	BudgetPriority *int     `json:"budget_priority"`
 	Tags           []string `json:"tags"`
+	ProjectManager *string  `json:"project_manager"`
+	AllPmsSchedule *bool    `json:"all_pms_schedule"`
 }
 
 type floatTask struct {
@@ -487,6 +489,12 @@ func (h *floatImportHandler) importFloatData(ctx context.Context, people []float
 		}
 		if code := strings.TrimSpace(fp.ProjectCode); code != "" {
 			params.ProjectCode = pgtype.Text{String: code, Valid: true}
+		}
+		if fp.ProjectManager != nil {
+			params.ProjectManager = pgtype.Text{String: strings.TrimSpace(*fp.ProjectManager), Valid: true}
+		}
+		if fp.AllPmsSchedule != nil {
+			params.AllPmsSchedule = *fp.AllPmsSchedule
 		}
 		project, err := q.CreateProject(ctx, params)
 		if err != nil {

@@ -35,7 +35,7 @@ func (q *Queries) ArchivePerson(ctx context.Context, id pgtype.UUID) (Person, er
 	return i, err
 }
 
-const projectSelectCols = `id, name, client, color, notes, archived_at, created_at, updated_at, billable, budget_type, budget_total, budget_priority, tags, project_code`
+const projectSelectCols = `id, name, client, color, notes, archived_at, created_at, updated_at, billable, budget_type, budget_total, budget_priority, tags, project_code, project_manager, all_pms_schedule`
 
 func scanProject(scanner interface {
 	Scan(dest ...any) error
@@ -56,6 +56,8 @@ func scanProject(scanner interface {
 		&p.BudgetPriority,
 		&p.Tags,
 		&p.ProjectCode,
+		&p.ProjectManager,
+		&p.AllPmsSchedule,
 	)
 	return p, err
 }
@@ -182,8 +184,8 @@ func (q *Queries) CreatePerson(ctx context.Context, arg CreatePersonParams) (Per
 }
 
 const createProject = `-- name: CreateProject :one
-INSERT INTO projects (name, client, color, notes, billable, budget_type, budget_total, budget_priority, tags, project_code)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+INSERT INTO projects (name, client, color, notes, billable, budget_type, budget_total, budget_priority, tags, project_code, project_manager, all_pms_schedule)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
 RETURNING ` + projectSelectCols
 
 type CreateProjectParams struct {
@@ -197,6 +199,8 @@ type CreateProjectParams struct {
 	BudgetPriority pgtype.Int2    `json:"budget_priority"`
 	Tags           []string       `json:"tags"`
 	ProjectCode    pgtype.Text    `json:"project_code"`
+	ProjectManager pgtype.Text    `json:"project_manager"`
+	AllPmsSchedule bool           `json:"all_pms_schedule"`
 }
 
 func (q *Queries) CreateProject(ctx context.Context, arg CreateProjectParams) (Project, error) {
@@ -211,6 +215,8 @@ func (q *Queries) CreateProject(ctx context.Context, arg CreateProjectParams) (P
 		arg.BudgetPriority,
 		arg.Tags,
 		arg.ProjectCode,
+		arg.ProjectManager,
+		arg.AllPmsSchedule,
 	)
 	return scanProject(row)
 }
@@ -767,17 +773,19 @@ func (q *Queries) UpdatePerson(ctx context.Context, arg UpdatePersonParams) (Per
 
 const updateProject = `-- name: UpdateProject :one
 UPDATE projects
-SET name            = $2,
-    client          = $3,
-    color           = $4,
-    notes           = $5,
-    billable        = $6,
-    budget_type     = $7,
-    budget_total    = $8,
-    budget_priority = $9,
-    tags            = $10,
-    project_code    = $11,
-    updated_at      = now()
+SET name             = $2,
+    client           = $3,
+    color            = $4,
+    notes            = $5,
+    billable         = $6,
+    budget_type      = $7,
+    budget_total     = $8,
+    budget_priority  = $9,
+    tags             = $10,
+    project_code     = $11,
+    project_manager  = $12,
+    all_pms_schedule = $13,
+    updated_at       = now()
 WHERE id = $1
 RETURNING ` + projectSelectCols
 
@@ -793,6 +801,8 @@ type UpdateProjectParams struct {
 	BudgetPriority pgtype.Int2    `json:"budget_priority"`
 	Tags           []string       `json:"tags"`
 	ProjectCode    pgtype.Text    `json:"project_code"`
+	ProjectManager pgtype.Text    `json:"project_manager"`
+	AllPmsSchedule bool           `json:"all_pms_schedule"`
 }
 
 func (q *Queries) UpdateProject(ctx context.Context, arg UpdateProjectParams) (Project, error) {
@@ -808,6 +818,8 @@ func (q *Queries) UpdateProject(ctx context.Context, arg UpdateProjectParams) (P
 		arg.BudgetPriority,
 		arg.Tags,
 		arg.ProjectCode,
+		arg.ProjectManager,
+		arg.AllPmsSchedule,
 	)
 	return scanProject(row)
 }

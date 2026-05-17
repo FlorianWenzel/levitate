@@ -36,6 +36,8 @@ export type Project = {
   tags: string[]
   // Float's user-defined unique project identifier (see Float API v3).
   project_code: string | null
+  project_manager: string | null
+  all_pms_schedule: boolean
   archived_at: string | null
   created_at: string
   updated_at: string
@@ -52,6 +54,8 @@ export type ProjectInput = {
   budget_priority?: ProjectBudgetPriority | null
   tags?: string[]
   project_code?: string | null
+  project_manager?: string | null
+  all_pms_schedule?: boolean
 }
 
 export type Assignment = {

@@ -31,6 +31,8 @@ const floatMockData = {
       budget_total: 25000,
       budget_priority: 0,
       tags: ['design', 'frontend'],
+      project_manager: 'Mock PM Alice',
+      all_pms_schedule: true,
     },
     {
       project_id: 302,
@@ -45,6 +47,8 @@ const floatMockData = {
       budget_total: 120,
       budget_priority: 1,
       tags: ['internal'],
+      project_manager: null,
+      all_pms_schedule: false,
     },
   ],
   '/tasks': [
