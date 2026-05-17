@@ -146,6 +146,12 @@ export type LoggedTime = {
   // the lock was applied.
   locked: boolean
   locked_date: string | null
+  // `created_by` and `modified_by` mirror Float's LoggedTime schema:
+  // the user id of the principal who created / last modified the entry.
+  // Nullable because rows imported from Float (or created before this
+  // field existed) may have no local user to attribute them to.
+  created_by: string | null
+  modified_by: string | null
   created_at: string
   updated_at: string
 }

@@ -27,6 +27,17 @@ func uuidString(u pgtype.UUID) string {
 	return uuid.UUID(u.Bytes).String()
 }
 
+// uuidStringPtr returns nil for an unset UUID so JSON serialization emits
+// `null` rather than `""`, which matches Float's contract for nullable
+// reference fields (e.g. `created_by`, `modified_by`).
+func uuidStringPtr(u pgtype.UUID) *string {
+	if !u.Valid {
+		return nil
+	}
+	s := uuid.UUID(u.Bytes).String()
+	return &s
+}
+
 func tsPtr(t pgtype.Timestamptz) *time.Time {
 	if !t.Valid {
 		return nil

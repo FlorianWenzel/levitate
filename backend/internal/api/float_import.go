@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/florianwenzel/levitate/backend/internal/auth"
 	"github.com/florianwenzel/levitate/backend/internal/db"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -276,7 +277,18 @@ func (h *floatImportHandler) importFloat(w http.ResponseWriter, r *http.Request)
 	deletedTimeOffs, deletedTimeOffsWarning := fetchFloatDeletedSafe(r.Context(), c, "/deleted/timeoffs")
 	deletedLoggedTime, deletedLoggedTimeWarning := fetchFloatDeletedSafe(r.Context(), c, "/deleted/logged-time")
 
-	result, err := h.importFloatData(r.Context(), people, clients, projects, tasks, timeOffs, timeOffTypes, milestones, phases, loggedTime, deletedTasks, deletedTimeOffs, deletedLoggedTime, fromDate, toDate)
+	// Attribute imported timesheet rows to the admin who triggered the import,
+	// matching Float's contract where every LoggedTime entry carries a
+	// `created_by` / `modified_by` user id. Lookup failure (e.g. a missing
+	// users row on the very first request) leaves the columns NULL.
+	var actorID pgtype.UUID
+	if p, ok := auth.FromContext(r.Context()); ok && p.Subject != "" {
+		if u, err := h.q.GetUserBySub(r.Context(), p.Subject); err == nil {
+			actorID = u.ID
+		}
+	}
+
+	result, err := h.importFloatData(r.Context(), people, clients, projects, tasks, timeOffs, timeOffTypes, milestones, phases, loggedTime, deletedTasks, deletedTimeOffs, deletedLoggedTime, fromDate, toDate, actorID)
 	if err != nil {
 		WriteProblem(w, r, http.StatusInternalServerError, "import_failed", err.Error())
 		return
@@ -323,7 +335,7 @@ func fetchFloatDeletedSafe(ctx context.Context, c floatClientAPI, path string) (
 	return ids, ""
 }
 
-func (h *floatImportHandler) importFloatData(ctx context.Context, people []floatPerson, clients []floatClient, projects []floatProject, tasks []floatTask, timeOffs []floatTimeOff, timeOffTypes []floatTimeOffType, milestones []floatMilestone, phases []floatPhase, loggedTime []floatLoggedTime, deletedTaskIDs []int64, deletedTimeOffIDs []int64, deletedLoggedTimeIDs []int64, fromDate pgtype.Date, toDate pgtype.Date) (floatImportResult, error) {
+func (h *floatImportHandler) importFloatData(ctx context.Context, people []floatPerson, clients []floatClient, projects []floatProject, tasks []floatTask, timeOffs []floatTimeOff, timeOffTypes []floatTimeOffType, milestones []floatMilestone, phases []floatPhase, loggedTime []floatLoggedTime, deletedTaskIDs []int64, deletedTimeOffIDs []int64, deletedLoggedTimeIDs []int64, fromDate pgtype.Date, toDate pgtype.Date, actorID pgtype.UUID) (floatImportResult, error) {
 	tx, err := h.pool.Begin(ctx)
 	if err != nil {
 		return floatImportResult{}, err
@@ -811,11 +823,11 @@ func (h *floatImportHandler) importFloatData(ctx context.Context, people []float
 				// be locked once a project's timesheet window closes, and
 				// re-opened). Reflect both transitions locally.
 				if !existing.Locked && locked {
-					if _, err := q.LockLoggedTime(ctx, existing.ID); err != nil {
+					if _, err := q.LockLoggedTime(ctx, existing.ID, actorID); err != nil {
 						return result, err
 					}
 				} else if existing.Locked && !locked {
-					if _, err := q.UnlockLoggedTime(ctx, existing.ID); err != nil {
+					if _, err := q.UnlockLoggedTime(ctx, existing.ID, actorID); err != nil {
 						return result, err
 					}
 				}
@@ -830,6 +842,7 @@ func (h *floatImportHandler) importFloatData(ctx context.Context, people []float
 						Billable:  billable,
 						Notes:     notes,
 						ProjectID: projectID,
+						ActorID:   actorID,
 					}); err != nil {
 						return result, err
 					}
@@ -848,6 +861,7 @@ func (h *floatImportHandler) importFloatData(ctx context.Context, people []float
 			Billable:  billable,
 			Notes:     notes,
 			ProjectID: projectID,
+			ActorID:   actorID,
 		})
 		if err != nil {
 			return result, err
@@ -858,7 +872,7 @@ func (h *floatImportHandler) importFloatData(ctx context.Context, people []float
 			}
 		}
 		if locked {
-			if _, err := q.LockLoggedTime(ctx, created.ID); err != nil {
+			if _, err := q.LockLoggedTime(ctx, created.ID, actorID); err != nil {
 				return result, err
 			}
 		}

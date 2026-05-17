@@ -108,6 +108,8 @@ const floatMockData = {
       notes: 'Mock logged time',
       locked: 0,
       locked_date: null,
+      created_by: 9001,
+      modified_by: 9001,
     },
   ],
   '/statuses': [

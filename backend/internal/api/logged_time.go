@@ -23,6 +23,8 @@ type loggedTimeDTO struct {
 	ProjectID  *string    `json:"project_id"`
 	Locked     bool       `json:"locked"`
 	LockedDate *time.Time `json:"locked_date"`
+	CreatedBy  *string    `json:"created_by"`
+	ModifiedBy *string    `json:"modified_by"`
 	CreatedAt  time.Time  `json:"created_at"`
 	UpdatedAt  time.Time  `json:"updated_at"`
 }
@@ -43,6 +45,8 @@ func toLoggedTimeDTO(l db.LoggedTime) loggedTimeDTO {
 		ProjectID:  projectID,
 		Locked:     l.Locked,
 		LockedDate: tsPtr(l.LockedDate),
+		CreatedBy:  uuidStringPtr(l.CreatedBy),
+		ModifiedBy: uuidStringPtr(l.ModifiedBy),
 		CreatedAt:  ts(l.CreatedAt),
 		UpdatedAt:  ts(l.UpdatedAt),
 	}
@@ -193,6 +197,8 @@ func (h *loggedTimeHandler) create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	actorID := h.actorID(r)
+
 	l, err := h.q.CreateLoggedTime(r.Context(), db.CreateLoggedTimeParams{
 		PersonID:  personID,
 		Date:      date,
@@ -200,6 +206,7 @@ func (h *loggedTimeHandler) create(w http.ResponseWriter, r *http.Request) {
 		Billable:  billable,
 		Notes:     in.Notes,
 		ProjectID: projectID,
+		ActorID:   actorID,
 	})
 	if err != nil {
 		WriteProblem(w, r, http.StatusInternalServerError, "create_failed", err.Error())
@@ -277,6 +284,7 @@ func (h *loggedTimeHandler) update(w http.ResponseWriter, r *http.Request) {
 		Billable:  billable,
 		Notes:     notes,
 		ProjectID: projectID,
+		ActorID:   h.actorID(r),
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -312,7 +320,7 @@ func (h *loggedTimeHandler) lock(w http.ResponseWriter, r *http.Request) {
 		WriteProblem(w, r, http.StatusBadRequest, "bad_id", err.Error())
 		return
 	}
-	l, err := h.q.LockLoggedTime(r.Context(), id)
+	l, err := h.q.LockLoggedTime(r.Context(), id, h.actorID(r))
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			WriteProblem(w, r, http.StatusNotFound, "not_found", "logged-time not found")
@@ -330,7 +338,7 @@ func (h *loggedTimeHandler) unlock(w http.ResponseWriter, r *http.Request) {
 		WriteProblem(w, r, http.StatusBadRequest, "bad_id", err.Error())
 		return
 	}
-	l, err := h.q.UnlockLoggedTime(r.Context(), id)
+	l, err := h.q.UnlockLoggedTime(r.Context(), id, h.actorID(r))
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			WriteProblem(w, r, http.StatusNotFound, "not_found", "logged-time not found")
@@ -340,6 +348,25 @@ func (h *loggedTimeHandler) unlock(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, toLoggedTimeDTO(l))
+}
+
+// actorID resolves the authenticated principal to its levitate users.id so the
+// Float-parity `created_by` / `modified_by` columns can record who touched the
+// row. Returns an invalid pgtype.UUID (zero value) on any lookup failure;
+// because the audit columns are nullable, that leaves them NULL instead of
+// erroring the write — losing the audit trail is preferable to refusing a
+// valid timesheet edit on a transient users-table read failure.
+func (h *loggedTimeHandler) actorID(r *http.Request) pgtype.UUID {
+	var empty pgtype.UUID
+	p, ok := auth.FromContext(r.Context())
+	if !ok || p.Subject == "" {
+		return empty
+	}
+	u, err := h.q.GetUserBySub(r.Context(), p.Subject)
+	if err != nil {
+		return empty
+	}
+	return u.ID
 }
 
 // resolveProjectBillable looks up the referenced project (if any) and derives
