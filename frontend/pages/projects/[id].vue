@@ -223,6 +223,28 @@ onMounted(load)
       </dl>
     </section>
 
+    <section
+      v-if="project"
+      class="mt-6 rounded border border-slate-200 bg-white p-4"
+      data-cy="project-manager-summary"
+    >
+      <h2 class="text-sm font-semibold text-slate-900">Project manager</h2>
+      <dl class="mt-2 grid grid-cols-2 gap-4 text-sm">
+        <div>
+          <dt class="text-xs uppercase tracking-wider text-slate-500">Manager</dt>
+          <dd class="mt-0.5 text-slate-900" data-cy="project-detail-project-manager">
+            {{ project.project_manager || '—' }}
+          </dd>
+        </div>
+        <div>
+          <dt class="text-xs uppercase tracking-wider text-slate-500">All PMs can schedule</dt>
+          <dd class="mt-0.5 text-slate-900" data-cy="project-detail-all-pms-schedule">
+            {{ project.all_pms_schedule ? 'Yes' : 'No' }}
+          </dd>
+        </div>
+      </dl>
+    </section>
+
     <section class="mt-8" data-cy="milestones-section">
       <div class="flex items-center justify-between">
         <div>

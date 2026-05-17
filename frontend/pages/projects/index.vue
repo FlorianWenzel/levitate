@@ -28,7 +28,17 @@ const budgetForm = ref<BudgetFormState>(emptyBudget())
 const tagsInput = ref('')
 
 function emptyForm(): ProjectInput {
-  return { name: '', client: '', color: '#0EA5E9', notes: '', billable: true, tags: [], project_code: '' }
+  return {
+    name: '',
+    client: '',
+    color: '#0EA5E9',
+    notes: '',
+    billable: true,
+    tags: [],
+    project_code: '',
+    project_manager: null,
+    all_pms_schedule: false,
+  }
 }
 
 function emptyBudget(): BudgetFormState {
@@ -86,6 +96,8 @@ function openEdit(p: Project) {
     billable: p.billable,
     tags: [...(p.tags ?? [])],
     project_code: p.project_code ?? '',
+    project_manager: p.project_manager,
+    all_pms_schedule: p.all_pms_schedule,
   }
   budgetForm.value = {
     type: p.budget_type ?? '',
@@ -104,6 +116,8 @@ async function submit() {
     body.budget_priority = budgetForm.value.priority === '' ? null : (Number(budgetForm.value.priority) as ProjectBudgetPriority)
     body.tags = parseTagsInput(tagsInput.value)
     body.project_code = (body.project_code ?? '').toString().trim() || null
+    const pm = (form.value.project_manager ?? '').toString().trim()
+    body.project_manager = pm === '' ? null : pm
     if (editing.value) {
       await call(`/api/projects/${editing.value.id}`, { method: 'PATCH', body })
     } else {
@@ -340,6 +354,26 @@ onMounted(load)
               >
             </div>
           </fieldset>
+          <div>
+            <label class="block text-xs font-medium text-slate-600">Project manager</label>
+            <input
+              v-model="form.project_manager"
+              data-cy="project-manager-input"
+              class="mt-1 w-full rounded border border-slate-300 px-2 py-1.5"
+              placeholder="Name of the assigned project manager"
+            >
+          </div>
+          <div>
+            <label class="flex items-center gap-2 text-xs font-medium text-slate-600">
+              <input
+                v-model="form.all_pms_schedule"
+                type="checkbox"
+                data-cy="all-pms-schedule-toggle"
+                class="rounded"
+              >
+              All PMs can schedule
+            </label>
+          </div>
           <div class="flex justify-end gap-2 pt-2">
             <button type="button" class="rounded px-3 py-1.5 text-slate-600 hover:bg-slate-100" @click="showForm = false">Cancel</button>
             <button type="submit" data-cy="project-save" class="rounded bg-slate-900 px-3 py-1.5 text-white hover:bg-slate-700">Save</button>

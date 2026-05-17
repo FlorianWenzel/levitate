@@ -51,6 +51,8 @@ type projectDTO struct {
 	BudgetPriority *int       `json:"budget_priority"`
 	Tags           []string   `json:"tags"`
 	ProjectCode    *string    `json:"project_code"`
+	ProjectManager *string    `json:"project_manager"`
+	AllPmsSchedule bool       `json:"all_pms_schedule"`
 	ArchivedAt     *time.Time `json:"archived_at"`
 	CreatedAt      time.Time  `json:"created_at"`
 	UpdatedAt      time.Time  `json:"updated_at"`
@@ -85,6 +87,11 @@ func toProjectDTO(p db.Project) projectDTO {
 		v := p.ProjectCode.String
 		pc = &v
 	}
+	var pm *string
+	if p.ProjectManager.Valid {
+		v := p.ProjectManager.String
+		pm = &v
+	}
 	return projectDTO{
 		ID:             uuidString(p.ID),
 		Name:           p.Name,
@@ -98,6 +105,8 @@ func toProjectDTO(p db.Project) projectDTO {
 		BudgetPriority: bp,
 		Tags:           tags,
 		ProjectCode:    pc,
+		ProjectManager: pm,
+		AllPmsSchedule: p.AllPmsSchedule,
 		ArchivedAt:     tsPtr(p.ArchivedAt),
 		CreatedAt:      ts(p.CreatedAt),
 		UpdatedAt:      ts(p.UpdatedAt),
@@ -115,6 +124,8 @@ type projectInput struct {
 	BudgetPriority *int     `json:"budget_priority"`
 	Tags           []string `json:"tags"`
 	ProjectCode    *string  `json:"project_code"`
+	ProjectManager *string  `json:"project_manager"`
+	AllPmsSchedule *bool    `json:"all_pms_schedule"`
 }
 
 // normalizedTags trims whitespace, drops empty entries, and de-duplicates
@@ -184,6 +195,21 @@ func (in projectInput) projectCodeParam() pgtype.Text {
 		return pgtype.Text{}
 	}
 	return pgtype.Text{String: trimmed, Valid: true}
+}
+
+func (in projectInput) projectManagerParam() pgtype.Text {
+	var pm pgtype.Text
+	if in.ProjectManager != nil {
+		pm = pgtype.Text{String: *in.ProjectManager, Valid: true}
+	}
+	return pm
+}
+
+func (in projectInput) allPmsScheduleParam() bool {
+	if in.AllPmsSchedule != nil {
+		return *in.AllPmsSchedule
+	}
+	return false
 }
 
 type projectsHandler struct {
@@ -265,6 +291,8 @@ func (h *projectsHandler) create(w http.ResponseWriter, r *http.Request) {
 		BudgetPriority: bp,
 		Tags:           in.normalizedTags(),
 		ProjectCode:    in.projectCodeParam(),
+		ProjectManager: in.projectManagerParam(),
+		AllPmsSchedule: in.allPmsScheduleParam(),
 	})
 	if err != nil {
 		if isUniqueViolation(err, "projects_project_code_key") {
@@ -309,6 +337,8 @@ func (h *projectsHandler) update(w http.ResponseWriter, r *http.Request) {
 		BudgetPriority: bp,
 		Tags:           in.normalizedTags(),
 		ProjectCode:    in.projectCodeParam(),
+		ProjectManager: in.projectManagerParam(),
+		AllPmsSchedule: in.allPmsScheduleParam(),
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {

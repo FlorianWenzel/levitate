@@ -86,6 +86,8 @@ type Project struct {
 	BudgetPriority pgtype.Int2        `json:"budget_priority"`
 	Tags           []string           `json:"tags"`
 	ProjectCode    pgtype.Text        `json:"project_code"`
+	ProjectManager pgtype.Text        `json:"project_manager"`
+	AllPmsSchedule bool               `json:"all_pms_schedule"`
 }
 
 type TimeOff struct {
