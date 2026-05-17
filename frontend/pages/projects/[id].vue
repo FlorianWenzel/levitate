@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { useAuthStore } from '~/stores/auth'
-import type { Milestone, MilestoneInput, Phase, PhaseInput, Project } from '~/types/api'
+import type { Milestone, MilestoneInput, Person, Phase, PhaseInput, Project } from '~/types/api'
 
 const auth = useAuthStore()
 const { call } = useApi()
@@ -40,18 +40,33 @@ function emptyPhaseForm(): PhaseInput {
   }
 }
 
+const people = ref<Person[]>([])
+
+const personById = computed(() => {
+  const map = new Map<string, Person>()
+  for (const p of people.value) map.set(p.id, p)
+  return map
+})
+
+function personName(id: string): string {
+  return personById.value.get(id)?.name ?? id
+}
+
 async function load() {
   loading.value = true
   error.value = null
   try {
-    const [p, m, ph] = await Promise.all([
-      call<Project>(`/api/projects/${projectID.value}`),
+    const expand = 'expenses,project_tasks,project_team'
+    const [p, m, ph, ppl] = await Promise.all([
+      call<Project>(`/api/projects/${projectID.value}?expand=${expand}`),
       call<Milestone[]>(`/api/projects/${projectID.value}/milestones`),
       call<Phase[]>(`/api/projects/${projectID.value}/phases`),
+      call<Person[]>(`/api/people`),
     ])
     project.value = p
     milestones.value = m
     phases.value = ph ?? []
+    people.value = ppl ?? []
   } catch (e: any) {
     error.value = e?.data?.detail ?? e?.message ?? 'Failed to load'
   } finally {
@@ -243,6 +258,117 @@ onMounted(load)
           </dd>
         </div>
       </dl>
+    </section>
+
+    <section
+      v-if="project"
+      class="mt-8"
+      data-cy="project-team-section"
+    >
+      <h2 class="text-lg font-semibold text-slate-900">Team</h2>
+      <p class="text-sm text-slate-500">People assigned to this project, with their hourly rate.</p>
+      <div class="mt-4 overflow-hidden rounded border border-slate-200 bg-white">
+        <table class="w-full text-sm">
+          <thead class="bg-slate-50 text-left text-xs uppercase tracking-wider text-slate-500">
+            <tr>
+              <th class="px-4 py-2">Person</th>
+              <th class="px-4 py-2">Hourly rate</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-slate-100">
+            <tr v-if="!(project.project_team?.length)">
+              <td colspan="2" class="px-4 py-6 text-center text-slate-400" data-cy="project-team-empty">
+                No team members yet.
+              </td>
+            </tr>
+            <tr
+              v-for="m in project.project_team ?? []"
+              :key="m.people_id"
+              class="hover:bg-slate-50"
+              data-cy="project-team-row"
+            >
+              <td class="px-4 py-2 font-medium text-slate-900" data-cy="project-team-person">
+                {{ personName(m.people_id) }}
+              </td>
+              <td class="px-4 py-2 text-slate-600" data-cy="project-team-rate">{{ m.hourly_rate }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section
+      v-if="project"
+      class="mt-8"
+      data-cy="project-tasks-section"
+    >
+      <h2 class="text-lg font-semibold text-slate-900">Tasks</h2>
+      <p class="text-sm text-slate-500">Scheduled work on this project.</p>
+      <div class="mt-4 overflow-hidden rounded border border-slate-200 bg-white">
+        <table class="w-full text-sm">
+          <thead class="bg-slate-50 text-left text-xs uppercase tracking-wider text-slate-500">
+            <tr>
+              <th class="px-4 py-2">Name</th>
+              <th class="px-4 py-2">Person</th>
+              <th class="px-4 py-2">Hours</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-slate-100">
+            <tr v-if="!(project.project_tasks?.length)">
+              <td colspan="3" class="px-4 py-6 text-center text-slate-400" data-cy="project-tasks-empty">
+                No tasks yet.
+              </td>
+            </tr>
+            <tr
+              v-for="t in project.project_tasks ?? []"
+              :key="t.task_id"
+              class="hover:bg-slate-50"
+              data-cy="project-task-row"
+            >
+              <td class="px-4 py-2 text-slate-700" data-cy="project-task-name">{{ t.name || '—' }}</td>
+              <td class="px-4 py-2 text-slate-600" data-cy="project-task-person">{{ personName(t.people_id) }}</td>
+              <td class="px-4 py-2 text-slate-600" data-cy="project-task-hours">{{ t.hours }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section
+      v-if="project"
+      class="mt-8"
+      data-cy="project-expenses-section"
+    >
+      <h2 class="text-lg font-semibold text-slate-900">Expenses</h2>
+      <p class="text-sm text-slate-500">Non-labor costs charged to this project.</p>
+      <div class="mt-4 overflow-hidden rounded border border-slate-200 bg-white">
+        <table class="w-full text-sm">
+          <thead class="bg-slate-50 text-left text-xs uppercase tracking-wider text-slate-500">
+            <tr>
+              <th class="px-4 py-2">Date</th>
+              <th class="px-4 py-2">Note</th>
+              <th class="px-4 py-2">Amount</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-slate-100">
+            <tr v-if="!(project.expenses?.length)">
+              <td colspan="3" class="px-4 py-6 text-center text-slate-400" data-cy="project-expenses-empty">
+                No expenses yet.
+              </td>
+            </tr>
+            <tr
+              v-for="x in project.expenses ?? []"
+              :key="x.expense_id"
+              class="hover:bg-slate-50"
+              data-cy="project-expense-row"
+            >
+              <td class="px-4 py-2 text-slate-600" data-cy="project-expense-date">{{ x.date }}</td>
+              <td class="px-4 py-2 text-slate-700" data-cy="project-expense-note">{{ x.note || '—' }}</td>
+              <td class="px-4 py-2 text-slate-600" data-cy="project-expense-amount">{{ x.amount }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
     </section>
 
     <section class="mt-8" data-cy="milestones-section">

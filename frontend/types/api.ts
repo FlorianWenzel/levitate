@@ -22,6 +22,28 @@ export type PersonInput = {
 export type ProjectBudgetType = 1 | 2 | 3
 export type ProjectBudgetPriority = 0 | 1 | 2
 
+// Float-compatible Project expansion shapes. The fields are only present on a
+// Project when the caller passes `?expand=expenses,project_tasks,project_team`
+// (any subset). Mirrors https://developer.float.com/swagger-api-v3.yaml.
+export type ProjectExpense = {
+  expense_id: string
+  amount: number
+  date: string
+  note: string
+}
+
+export type ProjectTask = {
+  task_id: string
+  name: string
+  hours: number
+  people_id: string
+}
+
+export type ProjectTeamMember = {
+  people_id: string
+  hourly_rate: number
+}
+
 export type Project = {
   id: string
   name: string
@@ -41,6 +63,10 @@ export type Project = {
   archived_at: string | null
   created_at: string
   updated_at: string
+  // Present only when the project was fetched with the matching `expand=` token.
+  expenses?: ProjectExpense[]
+  project_tasks?: ProjectTask[]
+  project_team?: ProjectTeamMember[]
 }
 
 export type ProjectInput = {
