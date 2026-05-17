@@ -68,8 +68,8 @@ ORDER BY name ASC;
 SELECT * FROM projects WHERE id = $1;
 
 -- name: CreateProject :one
-INSERT INTO projects (name, client, color, notes, billable, budget_type, budget_total, budget_priority, tags)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+INSERT INTO projects (name, client, color, notes, billable, budget_type, budget_total, budget_priority, tags, project_code)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 RETURNING *;
 
 -- name: UpdateProject :one
@@ -83,6 +83,7 @@ SET name            = $2,
     budget_total    = $8,
     budget_priority = $9,
     tags            = $10,
+    project_code    = $11,
     updated_at      = now()
 WHERE id = $1
 RETURNING *;

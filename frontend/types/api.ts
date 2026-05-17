@@ -34,6 +34,8 @@ export type Project = {
   budget_total: number | null
   budget_priority: ProjectBudgetPriority | null
   tags: string[]
+  // Float's user-defined unique project identifier (see Float API v3).
+  project_code: string | null
   archived_at: string | null
   created_at: string
   updated_at: string
@@ -49,6 +51,7 @@ export type ProjectInput = {
   budget_total?: number | null
   budget_priority?: ProjectBudgetPriority | null
   tags?: string[]
+  project_code?: string | null
 }
 
 export type Assignment = {

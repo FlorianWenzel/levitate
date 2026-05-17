@@ -11,8 +11,22 @@ import (
 	"github.com/florianwenzel/levitate/backend/internal/db"
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 )
+
+// isUniqueViolation reports whether err is a Postgres unique-constraint
+// violation against the named index/constraint.
+func isUniqueViolation(err error, constraint string) bool {
+	var pg *pgconn.PgError
+	if !errors.As(err, &pg) {
+		return false
+	}
+	if pg.Code != "23505" {
+		return false
+	}
+	return pg.ConstraintName == constraint
+}
 
 // Float Project budget enums. See https://developer.float.com/swagger-api-v3.yaml
 //   budget_type: 1=Total hours, 2=Total fee, 3=Hourly fee
@@ -36,6 +50,7 @@ type projectDTO struct {
 	BudgetTotal    *float64   `json:"budget_total"`
 	BudgetPriority *int       `json:"budget_priority"`
 	Tags           []string   `json:"tags"`
+	ProjectCode    *string    `json:"project_code"`
 	ArchivedAt     *time.Time `json:"archived_at"`
 	CreatedAt      time.Time  `json:"created_at"`
 	UpdatedAt      time.Time  `json:"updated_at"`
@@ -65,6 +80,11 @@ func toProjectDTO(p db.Project) projectDTO {
 	if tags == nil {
 		tags = []string{}
 	}
+	var pc *string
+	if p.ProjectCode.Valid {
+		v := p.ProjectCode.String
+		pc = &v
+	}
 	return projectDTO{
 		ID:             uuidString(p.ID),
 		Name:           p.Name,
@@ -77,6 +97,7 @@ func toProjectDTO(p db.Project) projectDTO {
 		BudgetTotal:    btot,
 		BudgetPriority: bp,
 		Tags:           tags,
+		ProjectCode:    pc,
 		ArchivedAt:     tsPtr(p.ArchivedAt),
 		CreatedAt:      ts(p.CreatedAt),
 		UpdatedAt:      ts(p.UpdatedAt),
@@ -93,6 +114,7 @@ type projectInput struct {
 	BudgetTotal    *float64 `json:"budget_total"`
 	BudgetPriority *int     `json:"budget_priority"`
 	Tags           []string `json:"tags"`
+	ProjectCode    *string  `json:"project_code"`
 }
 
 // normalizedTags trims whitespace, drops empty entries, and de-duplicates
@@ -148,6 +170,20 @@ func (in projectInput) budgetParams() (pgtype.Int2, pgtype.Numeric, pgtype.Int2)
 		}
 	}
 	return bt, btot, bp
+}
+
+// projectCodeParam normalizes the request's project_code into a pgtype.Text.
+// A nil pointer or an empty/whitespace string clears the code (stored NULL)
+// so the unique index treats absent values as distinct rather than colliding.
+func (in projectInput) projectCodeParam() pgtype.Text {
+	if in.ProjectCode == nil {
+		return pgtype.Text{}
+	}
+	trimmed := strings.TrimSpace(*in.ProjectCode)
+	if trimmed == "" {
+		return pgtype.Text{}
+	}
+	return pgtype.Text{String: trimmed, Valid: true}
 }
 
 type projectsHandler struct {
@@ -228,8 +264,13 @@ func (h *projectsHandler) create(w http.ResponseWriter, r *http.Request) {
 		BudgetTotal:    btot,
 		BudgetPriority: bp,
 		Tags:           in.normalizedTags(),
+		ProjectCode:    in.projectCodeParam(),
 	})
 	if err != nil {
+		if isUniqueViolation(err, "projects_project_code_key") {
+			WriteProblem(w, r, http.StatusConflict, "project_code_conflict", "project_code must be unique")
+			return
+		}
 		WriteProblem(w, r, http.StatusInternalServerError, "create_failed", err.Error())
 		return
 	}
@@ -267,10 +308,15 @@ func (h *projectsHandler) update(w http.ResponseWriter, r *http.Request) {
 		BudgetTotal:    btot,
 		BudgetPriority: bp,
 		Tags:           in.normalizedTags(),
+		ProjectCode:    in.projectCodeParam(),
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			WriteProblem(w, r, http.StatusNotFound, "not_found", "project not found")
+			return
+		}
+		if isUniqueViolation(err, "projects_project_code_key") {
+			WriteProblem(w, r, http.StatusConflict, "project_code_conflict", "project_code must be unique")
 			return
 		}
 		WriteProblem(w, r, http.StatusInternalServerError, "update_failed", err.Error())

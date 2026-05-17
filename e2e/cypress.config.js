@@ -21,6 +21,7 @@ const floatMockData = {
     {
       project_id: 301,
       name: 'Float Website',
+      project_code: 'WEB-001',
       client_id: 201,
       color: '00AEEF',
       notes: 'Imported from mock Float',
@@ -34,6 +35,7 @@ const floatMockData = {
     {
       project_id: 302,
       name: 'Float Internal Tools',
+      project_code: 'INT-002',
       client_id: 201,
       color: 'FFAA00',
       notes: 'Internal, non-billable work',

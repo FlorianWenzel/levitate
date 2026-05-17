@@ -28,7 +28,7 @@ const budgetForm = ref<BudgetFormState>(emptyBudget())
 const tagsInput = ref('')
 
 function emptyForm(): ProjectInput {
-  return { name: '', client: '', color: '#0EA5E9', notes: '', billable: true, tags: [] }
+  return { name: '', client: '', color: '#0EA5E9', notes: '', billable: true, tags: [], project_code: '' }
 }
 
 function emptyBudget(): BudgetFormState {
@@ -85,6 +85,7 @@ function openEdit(p: Project) {
     notes: p.notes,
     billable: p.billable,
     tags: [...(p.tags ?? [])],
+    project_code: p.project_code ?? '',
   }
   budgetForm.value = {
     type: p.budget_type ?? '',
@@ -102,6 +103,7 @@ async function submit() {
     body.budget_total = budgetForm.value.total === '' ? null : Number(budgetForm.value.total)
     body.budget_priority = budgetForm.value.priority === '' ? null : (Number(budgetForm.value.priority) as ProjectBudgetPriority)
     body.tags = parseTagsInput(tagsInput.value)
+    body.project_code = (body.project_code ?? '').toString().trim() || null
     if (editing.value) {
       await call(`/api/projects/${editing.value.id}`, { method: 'PATCH', body })
     } else {
@@ -188,6 +190,13 @@ onMounted(load)
               >
                 {{ p.name }}
               </NuxtLink>
+              <div
+                v-if="p.project_code"
+                class="mt-0.5 font-mono text-[10px] uppercase tracking-wide text-slate-500"
+                data-cy="project-code"
+              >
+                {{ p.project_code }}
+              </div>
             </td>
             <td class="px-4 py-2 text-slate-600">{{ p.client }}</td>
             <td class="px-4 py-2">
@@ -252,6 +261,15 @@ onMounted(load)
           <div>
             <label class="block text-xs font-medium text-slate-600">Client</label>
             <input v-model="form.client" class="mt-1 w-full rounded border border-slate-300 px-2 py-1.5">
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-slate-600">Project code</label>
+            <input
+              v-model="form.project_code"
+              data-cy="project-code-input"
+              class="mt-1 w-full rounded border border-slate-300 px-2 py-1.5 font-mono text-xs"
+              placeholder="Optional, unique"
+            >
           </div>
           <div>
             <label class="block text-xs font-medium text-slate-600">Color</label>
